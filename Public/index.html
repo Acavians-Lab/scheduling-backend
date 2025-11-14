@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Staff Schedule Manager</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <!-- Authentication Check Script - Must be first -->
+    <script>
+        // Check if user is authenticated before loading page
+        function checkAuthentication() {
+            const isLoggedIn = localStorage.getItem('isAuthenticated');
+            const rememberMe = localStorage.getItem('rememberMe');
+            const loginTime = localStorage.getItem('loginTime');
+
+            if (isLoggedIn !== 'true') {
+                // Not logged in, redirect to login page
+                window.location.href = 'login.html';
+                return;
+            }
+
+            if (rememberMe === 'true' && loginTime) {
+                // Check if login is still valid (30 days)
+                const thirtyDays = 30 * 24 * 60 * 60 * 1000;
+                if ((Date.now() - parseInt(loginTime)) >= thirtyDays) {
+                    // Login expired, clear and redirect
+                    localStorage.removeItem('isAuthenticated');
+                    localStorage.removeItem('loginTime');
+                    localStorage.removeItem('rememberMe');
+                    window.location.href = 'login.html';
+                    return;
+                }
+            }
+        }
+
+        // Run authentication check immediately
+        checkAuthentication();
+    </script>
+
+    <div class="container" id="scheduleContent">
+        <div class="header">
+            <h1>📅 Weekly Staff Schedule</h1>
+            <div class="header-actions">
+                <div class="weekly-hours-display" onclick="openWeeklySummaryModal()">
+                    📊 Weekly Hours: <span id="totalWeeklyHours">0</span>h
+                </div>
+                <button class="share-btn" onclick="openStaffListModal()">
+                    👥 Staff
+                </button>
+                <button class="share-btn" onclick="logout()" style="background: #ff6b6b;">
+                    🚪 Logout
+                </button>
+            </div>
+        </div>
+
+        <div class="schedule-container">
+            <div class="days-grid" id="daysGrid">
+                <!-- Days will be generated here -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Staff Details Modal -->
+    <div class="modal-overlay" id="staffModal">
+        <div class="modal">
+            <div class="modal-header">
+                <div class="modal-title" id="modalStaffName"></div>
+                <button class="close-btn" onclick="closeModal()">&times;</button>
+            </div>
+            <div class="modal-content" id="modalContent">
+                <!-- Staff details will be populated here -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Staff Modal -->
+    <div class="modal-overlay" id="addStaffModal">
+        <div class="modal">
+            <div class="modal-header">
+                <div class="modal-title">➕ Add Staff Member</div>
+                <button class="close-btn" onclick="closeAddStaffModal()">&times;</button>
+            </div>
+            <div class="modal-content">
+                <form id="addStaffForm" onsubmit="addStaff(event)">
+                    <div class="form-group">
+                        <label>Day</label>
+                        <input type="text" id="staffDay" readonly />
+                    </div>
+                    <div class="form-group">
+                        <label>Shift</label>
+                        <input type="text" id="staffShift" readonly />
+                    </div>
+                    <div class="form-group">
+                        <label>Staff Member</label>
+                        <select id="staffSelect" required onchange="populateStaffInfo()">
+                            <option value="">Select a staff member</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Start Time</label>
+                        <input type="time" id="staffStartTime" required />
+                    </div>
+                    <div class="form-group">
+                        <label>End Time</label>
+                        <input type="time" id="staffEndTime" required />
+                    </div>
+                    <button type="submit" class="btn-primary">Add to Schedule</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Staff List Modal -->
+    <div class="modal-overlay" id="staffListModal">
+        <div class="modal">
+            <div class="modal-header">
+                <div class="modal-title">👥 Staff Directory</div>
+                <button class="close-btn" onclick="closeStaffListModal()">&times;</button>
+            </div>
+            <div class="modal-content">
+                <button class="btn-primary" onclick="openCreateStaffModal()" style="margin-bottom: 20px;">
+                    ➕ Create New Staff Member
+                </button>
+                <div id="staffListContent">
+                    <!-- Staff list will be populated here -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Create Staff Modal -->
+    <div class="modal-overlay" id="createStaffModal">
+        <div class="modal">
+            <div class="modal-header">
+                <div class="modal-title">➕ Create New Staff Member</div>
+                <button class="close-btn" onclick="closeCreateStaffModal()">&times;</button>
+            </div>
+            <div class="modal-content">
+                <form id="createStaffForm" onsubmit="createStaff(event)">
+                    <div class="form-group">
+                        <label>Name</label>
+                        <input type="text" id="newStaffName" required placeholder="Enter staff name" />
+                    </div>
+                    <div class="form-group">
+                        <label>Role</label>
+                        <input type="text" id="newStaffRole" required placeholder="e.g., Educator, Site Manager" />
+                    </div>
+                    <button type="submit" class="btn-primary">Create Staff Member</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Quick Add Modal (from + button) -->
+    <div class="modal-overlay" id="quickAddModal">
+        <div class="modal">
+            <div class="modal-header">
+                <div class="modal-title">➕ Add Staff to <span id="quickAddDay"></span></div>
+                <button class="close-btn" onclick="closeQuickAddModal()">&times;</button>
+            </div>
+            <div class="modal-content">
+                <form id="quickAddForm" onsubmit="quickAddStaff(event)">
+                    <div class="form-group">
+                        <label>Shift</label>
+                        <select id="quickShift" required>
+                            <option value="">Select shift</option>
+                            <option value="Morning">Morning</option>
+                            <option value="Afternoon">Afternoon</option>
+                            <option value="PM Meeting">PM Meeting</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Staff Member</label>
+                        <select id="quickStaffSelect" required>
+                            <option value="">Select a staff member</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Start Time</label>
+                        <input type="time" id="quickStartTime" required />
+                    </div>
+                    <div class="form-group">
+                        <label>End Time</label>
+                        <input type="time" id="quickEndTime" required />
+                    </div>
+                    <button type="submit" class="btn-primary">Add to Schedule</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Weekly Summary Modal -->
+    <div class="modal-overlay" id="weeklySummaryModal">
+        <div class="modal">
+            <div class="modal-header">
+                <div class="modal-title">📊 Weekly Summary</div>
+                <button class="close-btn" onclick="closeWeeklySummaryModal()">&times;</button>
+            </div>
+            <div class="modal-content">
+                <div id="weeklySummaryContent">
+                    <!-- Summary will be populated here -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

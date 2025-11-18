@@ -3,6 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
     <title>Sign In - Staff Schedule Manager</title>
     <style>
         * {
@@ -292,167 +295,167 @@
     </style>
 </head>
 <body>
-    <div class="login-container">
-        <div class="logo-section">
-            <span class="logo-icon">📅</span>
-            <div class="logo-title">Staff Schedule Manager</div>
-            <div class="logo-subtitle">Workforce Management System</div>
-        </div>
+<div class="login-container">
+    <div class="logo-section">
+        <span class="logo-icon">📅</span>
+        <div class="logo-title">Staff Schedule Manager</div>
+        <div class="logo-subtitle">Workforce Management System</div>
+    </div>
 
-        <div class="welcome-text">
-            <h2>Welcome Back!</h2>
-            <p>Sign in to manage your staff schedules</p>
-        </div>
+    <div class="welcome-text">
+        <h2>Welcome Back!</h2>
+        <p>Sign in to manage your staff schedules</p>
+    </div>
 
-        <div class="error-message" id="errorMessage">
-            ❌ Invalid username or password. Please try again.
-        </div>
+    <div class="error-message" id="errorMessage">
+        ❌ Invalid username or password. Please try again.
+    </div>
 
-        <div class="success-message" id="successMessage">
-            ✓ Sign in successful! Redirecting...
-        </div>
+    <div class="success-message" id="successMessage">
+        ✓ Sign in successful! Redirecting...
+    </div>
 
-        <form id="loginForm">
-            <div class="form-group">
-                <label for="username">Username</label>
-                <div class="input-wrapper">
-                    <span class="input-icon">👤</span>
-                    <input 
-                        type="text" 
-                        id="username" 
-                        name="username" 
+    <form id="loginForm">
+        <div class="form-group">
+            <label for="username">Username</label>
+            <div class="input-wrapper">
+                <span class="input-icon">👤</span>
+                <input
+                        type="text"
+                        id="username"
+                        name="username"
                         placeholder="Enter your username"
                         required
                         autocomplete="username"
-                    />
-                </div>
+                />
             </div>
+        </div>
 
-            <div class="form-group">
-                <label for="password">Password</label>
-                <div class="input-wrapper">
-                    <span class="input-icon">🔒</span>
-                    <input 
-                        type="password" 
-                        id="password" 
-                        name="password" 
+        <div class="form-group">
+            <label for="password">Password</label>
+            <div class="input-wrapper">
+                <span class="input-icon">🔒</span>
+                <input
+                        type="password"
+                        id="password"
+                        name="password"
                         placeholder="Enter your password"
                         required
                         autocomplete="current-password"
-                    />
-                </div>
+                />
             </div>
-
-            <div class="remember-section">
-                <input type="checkbox" id="rememberMe" name="rememberMe" />
-                <label for="rememberMe">Remember me</label>
-            </div>
-
-            <button type="submit" class="sign-in-btn" id="signInBtn">
-                Sign In
-            </button>
-        </form>
-
-        <div class="footer-text">
-            © 2024 Staff Schedule Manager. All rights reserved.
         </div>
+
+        <div class="remember-section">
+            <input type="checkbox" id="rememberMe" name="rememberMe" />
+            <label for="rememberMe">Remember me</label>
+        </div>
+
+        <button type="submit" class="sign-in-btn" id="signInBtn">
+            Sign In
+        </button>
+    </form>
+
+    <div class="footer-text">
+        © 2024 Staff Schedule Manager. All rights reserved.
     </div>
+</div>
 
-    <script>
-        // Check if user is already logged in
-        function checkAuth() {
-            const isLoggedIn = localStorage.getItem('isAuthenticated');
-            const rememberMe = localStorage.getItem('rememberMe');
-            const loginTime = localStorage.getItem('loginTime');
+<script>
+    // Check if user is already logged in
+    function checkAuth() {
+        const isLoggedIn = localStorage.getItem('isAuthenticated');
+        const rememberMe = localStorage.getItem('rememberMe');
+        const loginTime = localStorage.getItem('loginTime');
 
-            if (isLoggedIn === 'true' && rememberMe === 'true') {
-                // Check if login is still valid (30 days)
-                const thirtyDays = 30 * 24 * 60 * 60 * 1000;
-                if (loginTime && (Date.now() - parseInt(loginTime)) < thirtyDays) {
-                    window.location.href = 'index.html';
-                } else {
-                    // Login expired
-                    localStorage.removeItem('isAuthenticated');
-                    localStorage.removeItem('loginTime');
-                }
+        if (isLoggedIn === 'true' && rememberMe === 'true') {
+            // Check if login is still valid (30 days)
+            const thirtyDays = 30 * 24 * 60 * 60 * 1000;
+            if (loginTime && (Date.now() - parseInt(loginTime)) < thirtyDays) {
+                window.location.href = 'index.html';
+            } else {
+                // Login expired
+                localStorage.removeItem('isAuthenticated');
+                localStorage.removeItem('loginTime');
             }
         }
+    }
 
-        // Check on page load
-        checkAuth();
+    // Check on page load
+    checkAuth();
 
-        // Form submission
-        document.getElementById('loginForm').addEventListener('submit', function(e) {
-            e.preventDefault();
+    // Form submission
+    document.getElementById('loginForm').addEventListener('submit', function(e) {
+        e.preventDefault();
 
-            const username = document.getElementById('username').value.trim();
-            const password = document.getElementById('password').value;
-            const rememberMe = document.getElementById('rememberMe').checked;
-            const signInBtn = document.getElementById('signInBtn');
-            const errorMessage = document.getElementById('errorMessage');
-            const successMessage = document.getElementById('successMessage');
+        const username = document.getElementById('username').value.trim();
+        const password = document.getElementById('password').value;
+        const rememberMe = document.getElementById('rememberMe').checked;
+        const signInBtn = document.getElementById('signInBtn');
+        const errorMessage = document.getElementById('errorMessage');
+        const successMessage = document.getElementById('successMessage');
 
-            // Hide previous messages
-            errorMessage.classList.remove('show');
-            successMessage.classList.remove('show');
+        // Hide previous messages
+        errorMessage.classList.remove('show');
+        successMessage.classList.remove('show');
 
-            // Add loading state
-            signInBtn.classList.add('loading');
-            signInBtn.textContent = 'Signing In';
+        // Add loading state
+        signInBtn.classList.add('loading');
+        signInBtn.textContent = 'Signing In';
 
-            // Simulate authentication delay (replace with actual API call)
-            setTimeout(() => {
-                // Demo credentials check (replace with actual authentication)
-                if (username === 'admin' && password === 'admin123') {
-                    // Successful login
-                    localStorage.setItem('isAuthenticated', 'true');
-                    localStorage.setItem('username', username);
-                    localStorage.setItem('loginTime', Date.now().toString());
-                    
-                    if (rememberMe) {
-                        localStorage.setItem('rememberMe', 'true');
-                    }
+        // Simulate authentication delay (replace with actual API call)
+        setTimeout(() => {
+            // Demo credentials check (replace with actual authentication)
+            if (username === 'admin' && password === 'admin123') {
+                // Successful login
+                localStorage.setItem('isAuthenticated', 'true');
+                localStorage.setItem('username', username);
+                localStorage.setItem('loginTime', Date.now().toString());
 
-                    // Show success message
-                    successMessage.classList.add('show');
-                    
-                    // Redirect after short delay
-                    setTimeout(() => {
-                        window.location.href = 'index.html';
-                    }, 1000);
-
-                } else {
-                    // Failed login
-                    signInBtn.classList.remove('loading');
-                    signInBtn.textContent = 'Sign In';
-                    errorMessage.classList.add('show');
-
-                    // Clear password field
-                    document.getElementById('password').value = '';
-                    document.getElementById('password').focus();
+                if (rememberMe) {
+                    localStorage.setItem('rememberMe', 'true');
                 }
-            }, 800);
-        });
 
-        // Input focus effects
-        const inputs = document.querySelectorAll('input[type="text"], input[type="password"]');
-        inputs.forEach(input => {
-            input.addEventListener('focus', function() {
-                this.parentElement.parentElement.style.transform = 'scale(1.02)';
-                this.parentElement.parentElement.style.transition = 'transform 0.2s';
-            });
+                // Show success message
+                successMessage.classList.add('show');
 
-            input.addEventListener('blur', function() {
-                this.parentElement.parentElement.style.transform = 'scale(1)';
-            });
-        });
+                // Redirect after short delay
+                setTimeout(() => {
+                    window.location.href = 'index.html';
+                }, 1000);
 
-        // Enter key support
-        document.getElementById('username').addEventListener('keypress', function(e) {
-            if (e.key === 'Enter') {
+            } else {
+                // Failed login
+                signInBtn.classList.remove('loading');
+                signInBtn.textContent = 'Sign In';
+                errorMessage.classList.add('show');
+
+                // Clear password field
+                document.getElementById('password').value = '';
                 document.getElementById('password').focus();
             }
+        }, 800);
+    });
+
+    // Input focus effects
+    const inputs = document.querySelectorAll('input[type="text"], input[type="password"]');
+    inputs.forEach(input => {
+        input.addEventListener('focus', function() {
+            this.parentElement.parentElement.style.transform = 'scale(1.02)';
+            this.parentElement.parentElement.style.transition = 'transform 0.2s';
         });
-    </script>
+
+        input.addEventListener('blur', function() {
+            this.parentElement.parentElement.style.transform = 'scale(1)';
+        });
+    });
+
+    // Enter key support
+    document.getElementById('username').addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+            document.getElementById('password').focus();
+        }
+    });
+</script>
 </body>
 </html>

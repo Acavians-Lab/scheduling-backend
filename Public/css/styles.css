@@ -1,0 +1,709 @@
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: #fceeed;
+            color: #333;
+            padding: 20px;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .header {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+            margin-bottom: 30px;
+            flex-wrap: wrap;
+        }
+
+        .header h1 {
+            font-size: 32px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .calendar-icon {
+            font-size: 36px;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+
+        .calendar-icon:hover {
+            transform: scale(1.1);
+        }
+
+        .header-stats {
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+        }
+
+        .stat-box {
+            background: #d9d7c2;
+            padding: 12px 20px;
+            border-radius: 8px;
+            border: 1px solid #948d71;
+        }
+
+        .stat-label {
+            font-size: 12px;
+            color: #666;
+            margin-bottom: 4px;
+        }
+
+        .stat-value {
+            font-size: 20px;
+            font-weight: bold;
+            color: #948d71;
+        }
+
+        .stat-value.negative {
+            color: #f7a49e;
+        }
+
+        .action-buttons {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .btn-primary {
+            background: #948d71;
+            color: #fff;
+        }
+
+        .btn-primary:hover {
+            background: #7d7660;
+        }
+
+        .btn-secondary {
+            background: #d9d7c2;
+            color: #333;
+            border: 1px solid #948d71;
+        }
+
+        .btn-secondary:hover {
+            background: #c9c7b2;
+        }
+
+        .btn-danger {
+            background: #f7a49e;
+            color: #fff;
+        }
+
+        .btn-danger:hover {
+            background: #f58d85;
+        }
+
+        .staff-section {
+            margin-bottom: 30px;
+            background: #d9d7c2;
+            padding: 20px;
+            border-radius: 12px;
+            border: 1px solid #948d71;
+        }
+
+        .staff-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+
+        .staff-input-group {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .staff-input {
+            padding: 10px 15px;
+            background: #fceeed;
+            border: 1px solid #948d71;
+            border-radius: 8px;
+            color: #333;
+            font-size: 14px;
+            min-width: 200px;
+        }
+
+        .staff-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .staff-chip {
+            background: #f7c6c2;
+            padding: 8px 16px;
+            border-radius: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            border: 1px solid #f7a49e;
+        }
+
+        .staff-chip .remove {
+            cursor: pointer;
+            color: #f7a49e;
+            font-weight: bold;
+        }
+
+        .schedule-grid {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 20px;
+            margin-bottom: 30px;
+            overflow-x: auto;
+        }
+
+        .day-card {
+            background: #d9d7c2;
+            border: 1px solid #948d71;
+            border-radius: 12px;
+            padding: 20px;
+            min-height: 200px;
+        }
+
+        .day-card.holiday {
+            background: #f7c6c2;
+            border-color: #f7a49e;
+        }
+
+        .day-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #948d71;
+        }
+
+        .day-title {
+            font-size: 18px;
+            font-weight: bold;
+            color: #948d71;
+            word-wrap: break-word;
+            overflow-wrap: break-word;
+            line-height: 1.2;
+        }
+
+        .day-title.long-title {
+            font-size: 14px;
+        }
+
+        .day-card.holiday .day-title {
+            color: #c85850;
+        }
+
+        .day-hours {
+            font-size: 12px;
+            color: #666;
+        }
+
+        .holiday-display {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 40px 20px;
+            text-align: center;
+        }
+
+        .holiday-name {
+            font-size: 18px;
+            font-weight: 600;
+            color: #c85850;
+            margin-bottom: 10px;
+        }
+
+        .holiday-text {
+            font-size: 14px;
+            color: #666;
+        }
+
+        .shift-section {
+            margin-bottom: 15px;
+        }
+
+        .shift-header {
+            font-size: 14px;
+            font-weight: 600;
+            color: #948d71;
+            margin-bottom: 8px;
+            cursor: pointer;
+            padding: 8px;
+            background: #fceeed;
+            border-radius: 6px;
+            transition: background 0.2s;
+        }
+
+        .shift-header:hover {
+            background: #f7c6c2;
+        }
+
+        .shift-entry {
+            background: #fceeed;
+            padding: 10px;
+            margin-bottom: 8px;
+            border-radius: 6px;
+            border-left: 3px solid #948d71;
+        }
+
+        .shift-entry-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 5px;
+        }
+
+        .shift-time {
+            font-size: 12px;
+            color: #666;
+            cursor: pointer;
+            transition: color 0.2s;
+        }
+
+        .shift-time:hover {
+            color: #948d71;
+            text-decoration: underline;
+        }
+
+        .shift-staff {
+            font-size: 13px;
+            color: #333;
+            margin-top: 5px;
+        }
+
+        .remove-shift {
+            cursor: pointer;
+            color: #f7a49e;
+            font-size: 12px;
+            padding: 4px 8px;
+            border-radius: 4px;
+            transition: background 0.2s;
+        }
+
+        .remove-shift:hover {
+            background: #f7a49e22;
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.9);
+            z-index: 1000;
+            overflow-y: auto;
+        }
+
+        .modal.active {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .modal-content {
+            background: #d9d7c2;
+            border: 1px solid #948d71;
+            border-radius: 12px;
+            padding: 30px;
+            max-width: 600px;
+            width: 100%;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .modal-header h2 {
+            color: #948d71;
+        }
+
+        .close-modal {
+            font-size: 28px;
+            cursor: pointer;
+            color: #666;
+            transition: color 0.2s;
+        }
+
+        .close-modal:hover {
+            color: #333;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-label {
+            display: block;
+            font-size: 14px;
+            color: #666;
+            margin-bottom: 8px;
+        }
+
+        .form-input {
+            width: 100%;
+            padding: 12px 15px;
+            background: #fceeed;
+            border: 1px solid #948d71;
+            border-radius: 8px;
+            color: #333;
+            font-size: 14px;
+        }
+
+        .form-input:focus {
+            outline: none;
+            border-color: #948d71;
+            box-shadow: 0 0 0 2px rgba(148, 141, 113, 0.2);
+        }
+
+        .checkbox-group {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .checkbox-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 12px 16px;
+            background: #fceeed;
+            border: 2px solid #948d71;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-weight: 500;
+        }
+
+        .checkbox-item:hover {
+            background: #f7c6c2;
+            border-color: #948d71;
+        }
+
+        .checkbox-item.selected {
+            background: #948d71;
+            border-color: #948d71;
+            color: #fff;
+        }
+
+        .checkbox-item input[type="checkbox"] {
+            cursor: pointer;
+            width: 18px;
+            height: 18px;
+            accent-color: #948d71;
+        }
+
+        .template-list {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .template-item {
+            background: #fceeed;
+            padding: 15px;
+            border-radius: 8px;
+            border: 1px solid #948d71;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .template-item:hover {
+            border-color: #948d71;
+            background: #f7c6c2;
+        }
+
+        .template-item.active-template {
+            background: #f7c6c2;
+            border: 2px solid #948d71;
+        }
+
+        .template-item.active-template:hover {
+            background: #f7c6c2;
+        }
+
+        .template-info {
+            flex: 1;
+        }
+
+        .template-name {
+            font-weight: 600;
+            margin-bottom: 5px;
+            color: #333;
+        }
+
+        .template-meta {
+            font-size: 12px;
+            color: #666;
+        }
+
+        .template-actions {
+            display: flex;
+            gap: 10px;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+
+        /* Login Styles */
+        .login-container {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            width: 100%;
+        }
+
+        .login-box {
+            background: #d9d7c2;
+            padding: 40px;
+            border-radius: 12px;
+            border: 1px solid #948d71;
+            width: 100%;
+            max-width: 400px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .login-box h1 {
+            color: #948d71;
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 28px;
+        }
+
+        .login-form-group {
+            margin-bottom: 20px;
+        }
+
+        .login-label {
+            display: block;
+            font-size: 14px;
+            color: #666;
+            margin-bottom: 8px;
+            font-weight: 500;
+        }
+
+        .login-input {
+            width: 100%;
+            padding: 12px 15px;
+            background: #fceeed;
+            border: 1px solid #948d71;
+            border-radius: 8px;
+            color: #333;
+            font-size: 14px;
+        }
+
+        .login-input:focus {
+            outline: none;
+            border-color: #948d71;
+            box-shadow: 0 0 0 2px rgba(148, 141, 113, 0.2);
+        }
+
+        .login-error {
+            color: #c85850;
+            font-size: 14px;
+            margin-top: 10px;
+            text-align: center;
+            min-height: 20px;
+        }
+
+        /* Welcome Screen Styles */
+        .welcome-screen {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            width: 100%;
+        }
+
+        .welcome-box {
+            background: #d9d7c2;
+            padding: 60px 40px;
+            border-radius: 12px;
+            border: 1px solid #948d71;
+            text-align: center;
+            max-width: 500px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .welcome-box h1 {
+            color: #948d71;
+            margin-bottom: 20px;
+            font-size: 32px;
+        }
+
+        .welcome-box p {
+            color: #666;
+            font-size: 16px;
+            line-height: 1.6;
+        }
+
+        @media (max-width: 768px) {
+            .header {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+
+            .schedule-grid {
+                grid-template-columns: repeat(5, minmax(250px, 1fr));
+            }
+
+            .day-card {
+                min-width: 250px;
+            }
+        }
+</head>
+<body>
+    <!-- Login Screen -->
+    <div class="login-container" id="loginContainer">
+        <div class="login-box">
+            <h1>Schedule Login</h1>
+            <form onsubmit="handleLogin(event)">
+                <div class="login-form-group">
+                    <label class="login-label">Username</label>
+                    <input type="text" class="login-input" id="loginUsername" placeholder="Enter username" required>
+                </div>
+                <div class="login-form-group">
+                    <label class="login-label">Password</label>
+                    <input type="password" class="login-input" id="loginPassword" placeholder="Enter password" required>
+                </div>
+                <div class="login-error" id="loginError"></div>
+                <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 10px;">Login</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Main Application (hidden until logged in) -->
+    <div class="app-container" id="appContainer" style="display: none;">
+        
+        <!-- Welcome Screen (shown when no template is active) -->
+        <div class="welcome-screen" id="welcomeScreen" style="display: none;">
+            <div class="welcome-box">
+                <h1>📅 Welcome to Schedule</h1>
+                <p>To get started, please create your first template with budget hours.</p>
+                <button class="btn btn-primary" onclick="openCreateTemplateModal()" style="margin-top: 20px; padding: 15px 40px; font-size: 16px;">
+                    Create Your First Template
+                </button>
+            </div>
+        </div>
+
+        <!-- Main Schedule View (shown when template is active) -->
+        <div class="schedule-view" id="scheduleView" style="display: none;">
+    <div class="container">
+        <div class="header">
+            <h1>
+                Schedule 
+                <span class="calendar-icon" onclick="openTemplateModal()">📅</span>
+            </h1>
+            <div class="header-stats">
+                <div class="stat-box">
+                    <div class="stat-label">Total Hours</div>
+                    <div class="stat-value" id="totalHours">0.0</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-label">Budget Hours</div>
+                    <div class="stat-value" id="budgetHours">0.0</div>
+                </div>
+            </div>
+            <div class="action-buttons">
+                <button class="btn btn-secondary" onclick="openHolidaysModal()">🎉 Holidays</button>
+                <button class="btn btn-primary" onclick="generatePDF()">📄 PDF</button>
+                <button class="btn btn-secondary" onclick="openCreateTemplateModal()">➕ Create Template</button>
+                <button class="btn btn-primary" onclick="saveCurrentSchedule()">💾 Save Template</button>
+                <button class="btn btn-danger" onclick="clearSchedule()">🗑️ Clear</button>
+                <button class="btn btn-secondary" onclick="logout()">🚪 Logout</button>
+            </div>
+        </div>
+
+        <!-- Staff Management Section -->
+        <div class="staff-section">
+            <div class="staff-header">
+                <h2>Staff List</h2>
+                <div class="staff-input-group">
+                    <input type="text" class="staff-input" id="staffNameInput" placeholder="Enter staff name..." onkeypress="handleStaffEnter(event)">
+                    <button class="btn btn-primary" onclick="addStaff()">Add Staff</button>
+                </div>
+            </div>
+            <div class="staff-list" id="staffList"></div>
+        </div>
+
+        <!-- Schedule Grid -->
+        <div class="schedule-grid" id="scheduleGrid"></div>
+    </div>
+    </div>
+    <!-- End Schedule View -->
+    </div>
+    <!-- End App Container -->
+
+    <!-- Template Modal -->
+    <div class="modal" id="templateModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Templates</h2>
+                <span class="close-modal" onclick="closeModal('templateModal')">&times;</span>
+
+/* Welcome Screen Styles */
+.welcome-screen {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    width: 100%;
+}
+
+.welcome-box {
+    background: #d9d7c2;
+    padding: 60px 40px;
+    border-radius: 12px;
+    border: 1px solid #948d71;
+    text-align: center;
+    max-width: 500px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.welcome-box h1 {
+    color: #948d71;
+    margin-bottom: 20px;
+    font-size: 32px;
+}
+
+.welcome-box p {
+    color: #666;
+    font-size: 16px;
+    line-height: 1.6;
+}

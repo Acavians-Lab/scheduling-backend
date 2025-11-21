@@ -3,76 +3,186 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
-    <!-- Prevent browser caching during development -->
-    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
-    <meta http-equiv="Pragma" content="no-cache">
-    <meta http-equiv="Expires" content="0">
-
-    <title>Staff Schedule Templates</title>
-
-    <!-- 💡 UPDATE THIS NUMBER: Change ?v=1 to ?v=2, then ?v=3, etc. when you modify CSS -->
-    <link rel="stylesheet" href="styles.css?v=1">
+    <title>Schedule 📅</title>
+    <link rel="stylesheet" href="css/styles.css">
 </head>
 <body>
-<!-- Authentication Check Script -->
-<script>
-    function checkAuthentication() {
-        const isLoggedIn = localStorage.getItem('isAuthenticated');
-        const rememberMe = localStorage.getItem('rememberMe');
-        const loginTime = localStorage.getItem('loginTime');
-        if (isLoggedIn !== 'true') {
-            window.location.href = 'login.html';
-            return;
-        }
-        if (rememberMe === 'true' && loginTime) {
-            const thirtyDays = 30 * 24 * 60 * 60 * 1000;
-            if ((Date.now() - parseInt(loginTime)) >= thirtyDays) {
-                localStorage.removeItem('isAuthenticated');
-                localStorage.removeItem('loginTime');
-                localStorage.removeItem('rememberMe');
-                window.location.href = 'login.html';
-                return;
-            }
-        }
-    }
-    checkAuthentication();
-</script>
-
-<div class="container" id="scheduleContent">
-    <div class="header">
-        <h1><span class="calendar-icon" onclick="openScheduleManagerModal()">📅</span> Weekly Staff Schedule</h1>
-        <div class="header-actions">
-            <div class="weekly-hours-display" onclick="openWeeklySummaryModal()">
-                📊 Hours: <span id="totalWeeklyHours">0</span>h
-            </div>
-            <div class="weekly-hours-display" onclick="openBudgetModal()" style="background: rgba(255, 255, 255, 0.15);">
-                💰 Budget: <span id="budgetRemainingDisplay" style="font-weight: 700;">0</span>h
-            </div>
-            <button class="share-btn" onclick="openStaffListModal()">👥 Staff</button>
-            <button class="share-btn" onclick="logout()" style="background: #ff6b6b;">🚪 Logout</button>
+    <!-- Login Screen -->
+    <div class="login-container" id="loginContainer">
+        <div class="login-box">
+            <h1>Schedule Login</h1>
+            <form onsubmit="handleLogin(event)">
+                <div class="login-form-group">
+                    <label class="login-label">Username</label>
+                    <input type="text" class="login-input" id="loginUsername" placeholder="Enter username" required>
+                </div>
+                <div class="login-form-group">
+                    <label class="login-label">Password</label>
+                    <input type="password" class="login-input" id="loginPassword" placeholder="Enter password" required>
+                </div>
+                <div class="login-error" id="loginError"></div>
+                <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 10px;">Login</button>
+            </form>
         </div>
     </div>
 
-    <div class="schedule-container">
-        <div class="days-grid" id="daysGrid">
-            <div class="week-date-display" id="weekDateDisplay"></div>
+    <!-- Main Application (hidden until logged in) -->
+    <div class="app-container" id="appContainer" style="display: none;">
+        
+        <!-- Welcome Screen (shown when no template is active) -->
+        <div class="welcome-screen" id="welcomeScreen" style="display: none;">
+            <div class="welcome-box">
+                <h1>📅 Welcome to Schedule</h1>
+                <p>To get started, please create your first template with budget hours.</p>
+                <button class="btn btn-primary" onclick="openCreateTemplateModal()" style="margin-top: 20px; padding: 15px 40px; font-size: 16px;">
+                    Create Your First Template
+                </button>
+            </div>
+        </div>
+
+        <!-- Main Schedule View (shown when template is active) -->
+        <div class="schedule-view" id="scheduleView" style="display: none;">
+        <div class="container">
+            <div class="header">
+                <h1>
+                    Schedule 
+                    <span class="calendar-icon" onclick="openTemplateModal()">📅</span>
+                </h1>
+                <div class="header-stats">
+                    <div class="stat-box">
+                        <div class="stat-label">Total Hours</div>
+                        <div class="stat-value" id="totalHours">0.0</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-label">Budget Hours</div>
+                        <div class="stat-value" id="budgetHours">0.0</div>
+                    </div>
+                </div>
+                <div class="action-buttons">
+                    <button class="btn btn-secondary" onclick="openHolidaysModal()">🎉 Holidays</button>
+                    <button class="btn btn-primary" onclick="generatePDF()">📄 PDF</button>
+                    <button class="btn btn-secondary" onclick="openCreateTemplateModal()">➕ Create Template</button>
+                    <button class="btn btn-primary" onclick="saveCurrentSchedule()">💾 Save Template</button>
+                    <button class="btn btn-danger" onclick="clearSchedule()">🗑️ Clear</button>
+                    <button class="btn btn-secondary" onclick="logout()">🚪 Logout</button>
+                </div>
+            </div>
+
+            <!-- Staff Management Section -->
+            <div class="staff-section">
+                <div class="staff-header">
+                    <h2>Staff List</h2>
+                    <div class="staff-input-group">
+                        <input type="text" class="staff-input" id="staffNameInput" placeholder="Enter staff name..." onkeypress="handleStaffEnter(event)">
+                        <button class="btn btn-primary" onclick="addStaff()">Add Staff</button>
+                    </div>
+                </div>
+                <div class="staff-list" id="staffList"></div>
+            </div>
+
+            <!-- Schedule Grid -->
+            <div class="schedule-grid" id="scheduleGrid"></div>
+        </div>
+        </div>
+        <!-- End Schedule View -->
+    </div>
+
+    <!-- Template Modal -->
+    <div class="modal" id="templateModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Templates</h2>
+                <span class="close-modal" onclick="closeModal('templateModal')">&times;</span>
+            </div>
+            <div class="template-list" id="templateList"></div>
+            <div class="empty-state" id="emptyTemplateState" style="display: none;">
+                No templates saved yet. Create a schedule and save it as a template!
+            </div>
         </div>
     </div>
-</div>
 
-<!-- All your modals go here (keeping them to save space) -->
-<div class="modal-overlay" id="staffModal"><div class="modal"><div class="modal-header"><div class="modal-title" id="modalStaffName"></div><button class="close-btn" onclick="closeModal()">&times;</button></div><div class="modal-content" id="modalContent"></div></div></div>
-<div class="modal-overlay" id="addStaffModal"><div class="modal"><div class="modal-header"><div class="modal-title">➕ Add Staff Member</div><button class="close-btn" onclick="closeAddStaffModal()">&times;</button></div><div class="modal-content"><form id="addStaffForm" onsubmit="addStaff(event)"><div class="form-group"><label>Day</label><input type="text" id="staffDay" readonly /></div><div class="form-group"><label>Shift</label><input type="text" id="staffShift" readonly /></div><div class="form-group"><label>Staff Member</label><select id="staffSelect" required onchange="populateStaffInfo()"><option value="">Select a staff member</option></select></div><div class="form-group"><label>Start Time</label><input type="time" id="staffStartTime" required /></div><div class="form-group"><label>End Time</label><input type="time" id="staffEndTime" required /></div><button type="submit" class="btn-primary">Add to Schedule</button></form></div></div></div>
-<div class="modal-overlay" id="staffListModal"><div class="modal"><div class="modal-header"><div class="modal-title">👥 Staff Directory</div><button class="close-btn" onclick="closeStaffListModal()">&times;</button></div><div class="modal-content"><button class="btn-primary" onclick="openCreateStaffModal()" style="margin-bottom: 20px;">➕ Create New Staff Member</button><div id="staffListContent"></div></div></div></div>
-<div class="modal-overlay" id="createStaffModal"><div class="modal"><div class="modal-header"><div class="modal-title">➕ Create New Staff Member</div><button class="close-btn" onclick="closeCreateStaffModal()">&times;</button></div><div class="modal-content"><form id="createStaffForm" onsubmit="createStaff(event)"><div class="form-group"><label>Name</label><input type="text" id="newStaffName" required placeholder="Enter staff name" /></div><div class="form-group"><label>Role</label><input type="text" id="newStaffRole" required placeholder="e.g., Educator, Site Manager" /></div><button type="submit" class="btn-primary">Create Staff Member</button></form></div></div></div>
-<div class="modal-overlay" id="quickAddModal"><div class="modal"><div class="modal-header"><div class="modal-title">➕ Add to <span id="quickAddDay"></span></div><button class="close-btn" onclick="closeQuickAddModal()">&times;</button></div><div class="modal-content"><div class="action-type-selector"><button type="button" class="action-type-btn active" onclick="selectActionType('staff')">👥 Add Staff</button><button type="button" class="action-type-btn" onclick="selectActionType('holiday')">🎉 Holiday/Event</button></div><form id="quickAddForm" onsubmit="quickAddStaff(event)" class="action-form active"><div class="form-group"><label>Shift</label><select id="quickShift" required><option value="">Select shift</option><option value="Morning">Morning</option><option value="Afternoon">Afternoon</option><option value="PM Meeting">PM Meeting</option></select></div><div class="form-group"><label>Staff Member</label><select id="quickStaffSelect" required><option value="">Select a staff member</option></select></div><div class="form-group"><label>Start Time</label><input type="time" id="quickStartTime" required /></div><div class="form-group"><label>End Time</label><input type="time" id="quickEndTime" required /></div><button type="submit" class="btn-primary">Add to Schedule</button></form><form id="holidayForm" onsubmit="addHoliday(event)" class="action-form"><div class="form-group"><label>Holiday/Event Name</label><input type="text" id="holidayName" placeholder="e.g., Christmas Day, Team Building" required /></div><div class="form-group"><label>Description (Optional)</label><textarea id="holidayDescription" rows="3" placeholder="Add any notes about this day off..."></textarea></div><div class="holiday-notice">ℹ️ This will mark the entire day as off for all staff</div><button type="submit" class="btn-primary">Mark as Holiday/Event</button></form></div></div></div>
-<div class="modal-overlay" id="weeklySummaryModal"><div class="modal"><div class="modal-header"><div class="modal-title">📊 Weekly Summary</div><button class="close-btn" onclick="closeWeeklySummaryModal()">&times;</button></div><div class="modal-content"><div id="weeklySummaryContent"></div></div></div></div>
-<div class="modal-overlay" id="scheduleManagerModal"><div class="modal modal-wide"><div class="modal-header"><div class="modal-title">📅 Schedule Templates</div><button class="close-btn" onclick="closeScheduleManagerModal()">&times;</button></div><div class="modal-content"><button class="btn-primary" onclick="openCreateScheduleModal()" style="margin-bottom: 20px;">➕ Create New Template</button><div id="scheduleListContent"></div></div></div></div>
-<div class="modal-overlay" id="createScheduleModal"><div class="modal"><div class="modal-header"><div class="modal-title">➕ Create New Template</div><button class="close-btn" onclick="closeCreateScheduleModal()">&times;</button></div><div class="modal-content"><form id="createScheduleForm" onsubmit="createNewSchedule(event)"><div class="form-group"><label>Start Date</label><input type="date" id="newScheduleStartDate" required /></div><div class="form-group"><label>End Date</label><input type="date" id="newScheduleEndDate" required /></div><div class="form-group"><label style="display: flex; align-items: center; gap: 10px; cursor: pointer;"><input type="checkbox" id="isHolidayCheckbox" onchange="toggleHolidayInput()" style="width: 20px; height: 20px; cursor: pointer;" /><span>Mark as Holiday/Event Period</span></label></div><div class="form-group" id="holidayInputGroup" style="display: none;"><label>Holiday or Event Name</label><input type="text" id="newScheduleName" placeholder="e.g., Summer Break, Christmas Week" /><div style="font-size: 0.85em; color: #666; margin-top: 5px;">📌 This will mark all days in this period as off (no staff scheduled)</div></div><div class="form-group"><label>Budget Hours (Optional)</label><input type="number" id="newScheduleBudget" min="0" step="0.5" placeholder="e.g., 160" /><div style="font-size: 0.85em; color: #666; margin-top: 5px;">💰 Set the total hours budget for this week</div></div><button type="submit" class="btn-primary">Create Schedule</button></form></div></div></div>
-<div class="modal-overlay" id="editBudgetModal"><div class="modal"><div class="modal-header"><div class="modal-title">💰 Set Budget Hours</div><button class="close-btn" onclick="closeBudgetModal()">&times;</button></div><div class="modal-content"><form id="editBudgetForm" onsubmit="saveBudget(event)"><div class="form-group"><label>Budget Hours for This Week</label><input type="number" id="editBudgetHours" min="0" step="0.5" placeholder="e.g., 160" required /><div style="font-size: 0.85em; color: #666; margin-top: 5px;">💡 The budget will decrease as you schedule staff</div></div><button type="submit" class="btn-primary">Adjust</button></form></div></div></div>
+    <!-- Shift Modal -->
+    <div class="modal" id="shiftModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Add Shift</h2>
+                <span class="close-modal" onclick="closeModal('shiftModal')">&times;</span>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Shift Type</label>
+                <select class="form-input" id="shiftType">
+                    <option value="Morning">Morning</option>
+                    <option value="Afternoon">Afternoon</option>
+                    <option value="PM Meeting">PM Meeting</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Select Days</label>
+                <div class="checkbox-group" id="dayCheckboxes"></div>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Start Time</label>
+                <input type="time" class="form-input" id="startTime">
+            </div>
+            <div class="form-group">
+                <label class="form-label">End Time</label>
+                <input type="time" class="form-input" id="endTime">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Select Staff</label>
+                <div class="checkbox-group" id="staffCheckboxes"></div>
+            </div>
+            <button class="btn btn-primary" style="width: 100%; margin-top: 20px;" onclick="saveShift()">Add Shift</button>
+        </div>
+    </div>
 
-<!-- 💡 UPDATE THIS NUMBER: Change ?v=1 to ?v=2, then ?v=3, etc. when you modify JS -->
-<script src="app.js?v=1"></script>
+    <!-- Holidays Modal -->
+    <div class="modal" id="holidaysModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Holidays</h2>
+                <span class="close-modal" onclick="closeModal('holidaysModal')">&times;</span>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Holiday/Event Name</label>
+                <input type="text" class="form-input" id="holidayName" placeholder="e.g., Christmas, Team Building">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Select Days Off</label>
+                <div class="checkbox-group" id="holidayDays"></div>
+            </div>
+            <div style="display: flex; gap: 10px; margin-top: 20px;">
+                <button class="btn btn-primary" style="flex: 1;" onclick="saveHoliday()">Save Holiday</button>
+                <button class="btn btn-danger" style="flex: 1;" onclick="clearAllHolidays()">Clear Holidays</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Create Template Modal -->
+    <div class="modal" id="createTemplateModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Create Template</h2>
+                <span class="close-modal" onclick="closeModal('createTemplateModal')">&times;</span>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Start Date</label>
+                <input type="date" class="form-input" id="templateStartDate">
+            </div>
+            <div class="form-group">
+                <label class="form-label">End Date</label>
+                <input type="date" class="form-input" id="templateEndDate">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Budget Hours</label>
+                <input type="number" class="form-input" id="templateBudget" placeholder="e.g., 160" step="0.5">
+            </div>
+            <button class="btn btn-primary" style="width: 100%; margin-top: 20px;" onclick="confirmCreateTemplate()">Create Template</button>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="js/auth.js"></script>
+    <script src="js/app.js"></script>
 </body>
 </html>

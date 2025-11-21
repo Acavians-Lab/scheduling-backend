@@ -1,3 +1,54 @@
+// API Configuration
+const API_URL = window.location.hostname === 'localhost'
+    ? 'http://localhost:3000'
+    : ''; // Empty string for production (same origin)
+
+// Get auth token from localStorage
+function getAuthToken() {
+    return localStorage.getItem('authToken');
+}
+
+// Check authentication
+function checkAuth() {
+    const token = getAuthToken();
+    if (!token) {
+        window.location.href = 'login.html';
+        return false;
+    }
+    return true;
+}
+
+// Load schedule from backend
+async function loadScheduleFromBackend() {
+    try {
+        const response = await fetch(`${API_URL}/api/schedule`, {
+            method: 'GET',
+            headers: {
+                'Authorization': `Bearer ${getAuthToken()}`,
+                'Content-Type': 'application/json'
+            }
+        });
+
+        if (!response.ok) {
+            if (response.status === 401) {
+                // Token invalid, redirect to login
+                localStorage.removeItem('authToken');
+                window.location.href = 'login.html';
+                return null;
+            }
+            throw new Error('Failed to load schedule');
+        }
+
+        const data = await response.json();
+        return data;
+
+    } catch (error) {
+        console.error('Error loading schedule:', error);
+        return null;
+    }
+}
+
+
 // Constants
 const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
 const shifts = ['Morning', 'Afternoon', 'PM Meeting'];
@@ -43,6 +94,11 @@ function toggleHolidayInput() {
 function deepClone(obj) {
     return JSON.parse(JSON.stringify(obj));
 }
+function getUserStorageKey() {
+    const username = localStorage.getItem("username") || "defaultUser";
+    return `staffScheduleData_${username}`;
+}
+
 
 // Get day of week name from date
 function getDayOfWeek(dateString) {
@@ -53,7 +109,6 @@ function getDayOfWeek(dateString) {
 
 // Find Monday-Friday dates within a date range
 function findWorkWeekDates(startDate, endDate) {
-    console.log("Finding work dates between:", startDate, "and", endDate);
     const start = new Date(startDate + 'T00:00:00');
     const end = new Date(endDate + 'T00:00:00');
     const workDates = {};
@@ -72,61 +127,112 @@ function findWorkWeekDates(startDate, endDate) {
         }
     });
 
-    console.log("Work dates found:", workDates);
     return workDates;
 }
 
-// Local Storage Functions
-function saveToLocalStorage() {
-    if (currentScheduleId !== null) {
-        const currentSchedule = allSchedules.find(s => s.id === currentScheduleId);
-        if (currentSchedule) {
-            currentSchedule.schedule = deepClone(schedule);
-            currentSchedule.weekDates = deepClone(weekDates);
-            currentSchedule.holidays = deepClone(holidays);
-            currentSchedule.budgetHours = budgetHours;
-            currentSchedule.lastModified = Date.now();
+
+// Save schedule to backend
+async function saveScheduleToBackend(scheduleData) {
+    try {
+        const response = await fetch(`${API_URL}/api/schedule`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${getAuthToken()}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(scheduleData)
+        });
+
+        if (!response.ok) {
+            if (response.status === 401) {
+                localStorage.removeItem('authToken');
+                window.location.href = 'login.html';
+                return false;
+            }
+            throw new Error('Failed to save schedule');
+        }
+
+        return true;
+
+    } catch (error) {
+        console.error('Error saving schedule:', error);
+        return false;
+    }
+}
+
+// Initialize - load from backend on page load
+document.addEventListener('DOMContentLoaded', async function() {
+    if (!checkAuth()) return;
+
+    const scheduleData = await loadScheduleFromBackend();
+    if (scheduleData) {
+        // Load the data into your existing variables
+        allSchedules = scheduleData.allSchedules || [];
+        currentScheduleId = scheduleData.currentScheduleId || null;
+        staffDirectory = scheduleData.staffDirectory || [];
+        budgetHours = scheduleData.budgetHours || 0;
+        weekDates = scheduleData.weekDates || {};
+        holidays = scheduleData.holidays || {};
+
+        // Render the schedule
+        renderScheduleList();
+        if (currentScheduleId) {
+            loadSchedule(currentScheduleId);
         }
     }
+});
 
-    const data = {
-        allSchedules: allSchedules,
-        currentScheduleId: currentScheduleId,
-        staffDirectory: staffDirectory
+// Local Storage Functions
+async function saveToLocalStorage() {
+    const scheduleData = {
+        allSchedules,
+        currentScheduleId,
+        staffDirectory,
+        budgetHours,
+        weekDates,
+        holidays
     };
-    localStorage.setItem('staffScheduleData', JSON.stringify(data));
-    console.log('Data saved');
+
+    // Save to localStorage (fallback)
+    localStorage.setItem('allSchedules', JSON.stringify(allSchedules));
+    localStorage.setItem('currentScheduleId', currentScheduleId);
+    localStorage.setItem('staffDirectory', JSON.stringify(staffDirectory));
+    localStorage.setItem('budgetHours', budgetHours);
+    localStorage.setItem('weekDates', JSON.stringify(weekDates));
+    localStorage.setItem('holidays', JSON.stringify(holidays));
+
+    // Save to backend
+    await saveScheduleToBackend(scheduleData);
 }
+
 
 function loadFromLocalStorage() {
-    const saved = localStorage.getItem('staffScheduleData');
-    if (saved) {
-        try {
-            const data = JSON.parse(saved);
+    const saved = localStorage.getItem(getUserStorageKey());
+    if (!saved) return false;
 
-            staffDirectory = data.staffDirectory || [];
-            allSchedules = data.allSchedules || [];
-            currentScheduleId = data.currentScheduleId;
+    try {
+        const data = JSON.parse(saved);
 
-            if (currentScheduleId !== null && allSchedules.length > 0) {
-                const currentSchedule = allSchedules.find(s => s.id === currentScheduleId);
-                if (currentSchedule) {
-                    schedule = deepClone(currentSchedule.schedule) || {};
-                    weekDates = deepClone(currentSchedule.weekDates) || {};
-                    holidays = deepClone(currentSchedule.holidays) || {};
-                    budgetHours = currentSchedule.budgetHours || 0;
-                }
+        staffDirectory = data.staffDirectory || [];
+        allSchedules = data.allSchedules || [];
+        currentScheduleId = data.currentScheduleId;
+
+        if (currentScheduleId !== null && allSchedules.length > 0) {
+            const currentSchedule = allSchedules.find(s => s.id === currentScheduleId);
+            if (currentSchedule) {
+                schedule = deepClone(currentSchedule.schedule) || {};
+                weekDates = deepClone(currentSchedule.weekDates) || {};
+                holidays = deepClone(currentSchedule.holidays) || {};
+                budgetHours = currentSchedule.budgetHours || 0;
             }
-
-            console.log('Data loaded');
-            return true;
-        } catch (e) {
-            console.error('Error loading:', e);
-            return false;
         }
+
+        return true;
+    } catch (err) {
+        return false;
     }
-    return false;
 }
+
 
 // Date Functions
 function formatDisplayDate(dateString) {
@@ -255,7 +361,6 @@ function addHoliday(event) {
     const description = document.getElementById('holidayDescription').value.trim();
 
     if (!name) {
-        alert('Please enter a holiday name');
         return;
     }
 
@@ -364,7 +469,6 @@ function quickAddStaff(event) {
     const endTime = document.getElementById('quickEndTime').value;
 
     if (!shift || !staffData || !startTime || !endTime) {
-        alert('Please fill in all fields');
         return;
     }
 
@@ -487,13 +591,11 @@ function createStaff(event) {
     const role = document.getElementById('newStaffRole').value.trim();
 
     if (!name || !role) {
-        alert('Please fill in all fields');
         return;
     }
 
     const exists = staffDirectory.some(s => s.name.toLowerCase() === name.toLowerCase());
     if (exists) {
-        alert('Staff member with this name already exists!');
         return;
     }
 
@@ -695,17 +797,14 @@ function createNewSchedule(event) {
     const budget = budgetInput ? parseFloat(budgetInput) : 0;
 
     if (!startDate || !endDate) {
-        alert('Please select both start and end dates');
         return;
     }
 
     if (new Date(startDate) > new Date(endDate)) {
-        alert('Start date must be before end date');
         return;
     }
 
     if (isHoliday && !name) {
-        alert('Please enter a name for the holiday period');
         return;
     }
 
@@ -714,7 +813,6 @@ function createNewSchedule(event) {
 
     // Allow partial weeks - just need at least one weekday
     if (Object.keys(workWeekDates).length === 0) {
-        alert('No weekdays (Mon-Fri) found in this date range. Please select a range that includes at least one weekday.');
         return;
     }
 
@@ -724,7 +822,6 @@ function createNewSchedule(event) {
     });
 
     if (exists) {
-        alert('A schedule template already exists for this exact date range!');
         return;
     }
 
@@ -782,23 +879,16 @@ function createNewSchedule(event) {
 
     // Show success message with details
     const daysIncluded = Object.keys(workWeekDates).join(', ');
-    alert(`Schedule template created successfully!\n\nDate Range: ${formatDisplayDate(startDate)} - ${formatDisplayDate(endDate)}\nWeekdays included: ${daysIncluded}`);
 }
 
 function loadSchedule(scheduleId) {
-    console.log("=== LOADING SCHEDULE ===");
-    console.log("Schedule ID to load:", scheduleId);
 
     const scheduleToLoad = allSchedules.find(s => s.id === scheduleId);
 
     if (!scheduleToLoad) {
-        console.error("ERROR: Schedule not found!");
-        alert('Schedule not found!');
         return;
     }
 
-    console.log("Found schedule:", scheduleToLoad);
-    console.log("Week dates in schedule:", scheduleToLoad.weekDates);
 
     currentScheduleId = scheduleId;
     schedule = deepClone(scheduleToLoad.schedule) || {};
@@ -806,14 +896,10 @@ function loadSchedule(scheduleId) {
     holidays = deepClone(scheduleToLoad.holidays) || {};
     budgetHours = scheduleToLoad.budgetHours || 0;
 
-    console.log("After deep clone, weekDates:", weekDates);
-    console.log("Current schedule ID set to:", currentScheduleId);
 
     saveToLocalStorage();
-    console.log("Calling renderSchedule()...");
     renderSchedule();
     closeScheduleManagerModal();
-    console.log("=== LOAD COMPLETE ===");
 }
 
 function deleteSchedule(scheduleId) {
@@ -851,24 +937,18 @@ function deleteSchedule(scheduleId) {
 
 // Main Render Function
 function renderSchedule() {
-    console.log("=== RENDER SCHEDULE START ===");
-    console.log("weekDates:", JSON.stringify(weekDates, null, 2));
-    console.log("currentScheduleId:", currentScheduleId);
 
     const grid = document.getElementById('daysGrid');
     const weekDisplay = document.getElementById('weekDateDisplay');
 
     if (!grid) {
-        console.error("ERROR: daysGrid element not found!");
         return;
     }
 
     if (!weekDisplay) {
-        console.error("ERROR: weekDateDisplay element not found!");
         return;
     }
 
-    console.log("Elements found OK");
 
     // Update week date display - get the first and last date from weekDates
     const datesAvailable = Object.values(weekDates).filter(d => d);
@@ -877,20 +957,16 @@ function renderSchedule() {
         const startDate = formatDisplayDate(sortedDates[0]);
         const endDate = formatDisplayDate(sortedDates[sortedDates.length - 1]);
         weekDisplay.textContent = `${startDate} - ${endDate}`;
-        console.log("Week display set to:", weekDisplay.textContent);
     } else {
         weekDisplay.textContent = 'No schedule template selected';
-        console.log("No valid dates found");
     }
 
     let html = '';
-    console.log("Rendering days...");
 
     // Only render days that have dates in the current schedule
     days.forEach(day => {
         // Skip days that don't exist in this schedule
         if (!weekDates[day]) {
-            console.log(`Skipping ${day} - not in current schedule`);
             return;
         }
 
@@ -898,7 +974,6 @@ function renderSchedule() {
         const holidayClass = isHoliday ? 'holiday' : '';
         const dateDisplay = formatDateWithYear(weekDates[day]);
 
-        console.log(`${day}: date=${weekDates[day]}, display=${dateDisplay}`);
 
         html += `
             <div class="day-column ${holidayClass}">
@@ -1017,7 +1092,6 @@ document.getElementById('editBudgetModal').addEventListener('click', function(e)
 // Budget Modal Functions
 function openBudgetModal() {
     if (currentScheduleId === null) {
-        alert('No schedule template is currently active. Please select a schedule first.');
         return;
     }
 

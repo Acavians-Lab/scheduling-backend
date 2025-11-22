@@ -49,11 +49,6 @@ app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'Public', 'index.html'));
 });
 
-// Login route for HTML (optional convenience)
-app.get('/login', (req, res) => {
-    res.sendFile(path.join(__dirname, 'Public', 'login.html'));
-});
-
 // ---------- AUTH HELPERS ----------
 function generateToken(user) {
     return jwt.sign({ id: user._id, username: user.username }, process.env.JWT_SECRET, {

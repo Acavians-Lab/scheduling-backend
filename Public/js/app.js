@@ -11,9 +11,9 @@ let currentSchedule = {
 };
 
 // Initialize
-function init() {
+async function init() {
     checkLoginStatus();
-    loadFromLocalStorage();
+    await loadFromDatabase();
     checkTemplateStatus();
     renderStaffList();
     renderSchedule();
@@ -783,6 +783,7 @@ function generatePDF() {
     }
 
     // Reorganize all schedule entries by actual time (not by original category)
+    // BUT keep PM Meeting in its original category since it's a meeting type, not time-based
     const reorganizedSchedule = {};
 
     currentSchedule.days.forEach(day => {
@@ -797,8 +798,14 @@ function generatePDF() {
             ['Morning', 'Afternoon', 'PM Meeting'].forEach(originalShift => {
                 const entries = currentSchedule.schedule[day][originalShift] || [];
                 entries.forEach(entry => {
-                    // Determine correct shift based on start time
-                    const correctShift = getShiftByTime(entry.startTime);
+                    // PM Meeting should always stay as PM Meeting, regardless of start time
+                    // Only reorganize Morning and Afternoon shifts based on their actual times
+                    let correctShift;
+                    if (originalShift === 'PM Meeting') {
+                        correctShift = 'PM Meeting';
+                    } else {
+                        correctShift = getShiftByTime(entry.startTime);
+                    }
                     reorganizedSchedule[day][correctShift].push(entry);
                 });
             });
@@ -1074,12 +1081,15 @@ function closeModal(id) {
 }
 
 // Local Storage
+
 function saveToLocalStorage() {
     localStorage.setItem('currentSchedule', JSON.stringify(currentSchedule));
     // Also auto-save to active template if one exists
     if (currentSchedule.activeTemplateId !== null) {
         saveCurrentTemplateToStorage();
     }
+    // Save to cloud
+    saveToDatabase();
 }
 
 function loadFromLocalStorage() {
@@ -1091,6 +1101,84 @@ function loadFromLocalStorage() {
         currentSchedule.holidays = data.holidays || {};
         currentSchedule.budgetHours = data.budgetHours || 0;
         currentSchedule.activeTemplateId = data.activeTemplateId !== undefined ? data.activeTemplateId : null;
+    }
+}
+
+// MongoDB Cloud Sync
+async function loadFromDatabase() {
+    const token = localStorage.getItem('authToken');
+    if (!token) {
+        loadFromLocalStorage();
+        return;
+    }
+
+    try {
+        const url = window.location.hostname === 'localhost'
+            ? 'http://localhost:3000/api/schedule'
+            : '/api/schedule';
+
+        const response = await fetch(url, {
+            method: 'GET',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+            }
+        });
+
+        if (response.ok) {
+            const data = await response.json();
+
+            if (data.allSchedules && data.allSchedules.length > 0) {
+                localStorage.setItem('scheduleTemplates', JSON.stringify(data.allSchedules));
+            }
+
+            if (data.currentScheduleId !== null) {
+                const templates = JSON.parse(localStorage.getItem('scheduleTemplates') || '[]');
+                const template = templates[data.currentScheduleId];
+                if (template) {
+                    currentSchedule.activeTemplateId = data.currentScheduleId;
+                    currentSchedule.staff = [...(template.staff || [])];
+                    currentSchedule.schedule = JSON.parse(JSON.stringify(template.schedule || {}));
+                    currentSchedule.holidays = {...(template.holidays || {})};
+                    currentSchedule.budgetHours = template.budgetHours || 0;
+                }
+            }
+        } else {
+            loadFromLocalStorage();
+        }
+    } catch (error) {
+        loadFromLocalStorage();
+    }
+}
+
+async function saveToDatabase() {
+    const token = localStorage.getItem('authToken');
+    if (!token) return;
+
+    try {
+        const url = window.location.hostname === 'localhost'
+            ? 'http://localhost:3000/api/schedule'
+            : '/api/schedule';
+
+        const templates = JSON.parse(localStorage.getItem('scheduleTemplates') || '[]');
+
+        await fetch(url, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                allSchedules: templates,
+                currentScheduleId: currentSchedule.activeTemplateId,
+                staffDirectory: currentSchedule.staff,
+                budgetHours: currentSchedule.budgetHours,
+                weekDates: {},
+                holidays: currentSchedule.holidays
+            })
+        });
+    } catch (error) {
+        // Silent fail - data still in localStorage
     }
 }
 

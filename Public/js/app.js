@@ -10,6 +10,9 @@ let currentSchedule = {
     activeTemplateId: null
 };
 
+// Prevent multiple initializations
+let isInitialized = false;
+
 // Utility function to convert 24-hour time to 12-hour format with AM/PM
 function formatTime12Hour(time24) {
     if (!time24) return '';
@@ -28,6 +31,14 @@ function formatTime12Hour(time24) {
 
 // Initialize
 async function init() {
+    if (isInitialized) {
+        console.log('Already initialized, skipping...');
+        return;
+    }
+
+    isInitialized = true;
+    console.log('Initializing app...');
+
     checkLoginStatus();
     await loadFromDatabase();
     checkTemplateStatus();
@@ -913,35 +924,47 @@ async function loadFromDatabase() {
     }
 }
 
+// Debounce timer for save operations
+let saveDebounceTimer = null;
+
 async function saveToDatabase() {
     const token = localStorage.getItem('authToken');
     if (!token) return;
 
-    try {
-        const url = window.location.hostname === 'localhost'
-            ? 'http://localhost:3000/api/schedule'
-            : '/api/schedule';
-
-        const templates = JSON.parse(localStorage.getItem(getUserStorageKey('scheduleTemplates')) || '[]');
-
-        await fetch(url, {
-            method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${token}`,
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                allSchedules: templates,
-                currentScheduleId: currentSchedule.activeTemplateId,
-                staffDirectory: currentSchedule.staff,
-                budgetHours: currentSchedule.budgetHours,
-                weekDates: {},
-                holidays: currentSchedule.holidays
-            })
-        });
-    } catch (error) {
-        // Silent fail - data still in localStorage
+    // Clear existing timer
+    if (saveDebounceTimer) {
+        clearTimeout(saveDebounceTimer);
     }
+
+    // Debounce: wait 500ms before actually saving
+    saveDebounceTimer = setTimeout(async () => {
+        try {
+            const url = window.location.hostname === 'localhost'
+                ? 'http://localhost:3000/api/schedule'
+                : '/api/schedule';
+
+            const templates = JSON.parse(localStorage.getItem(getUserStorageKey('scheduleTemplates')) || '[]');
+
+            await fetch(url, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    allSchedules: templates,
+                    currentScheduleId: currentSchedule.activeTemplateId,
+                    staffDirectory: currentSchedule.staff,
+                    budgetHours: currentSchedule.budgetHours,
+                    weekDates: {},
+                    holidays: currentSchedule.holidays
+                })
+            });
+        } catch (error) {
+            // Silent fail - data still in localStorage
+            console.log('Save to database failed (data still in localStorage)');
+        }
+    }, 500);
 }
 
 // Utility function to escape HTML

@@ -10,6 +10,22 @@ let currentSchedule = {
     activeTemplateId: null
 };
 
+// Utility function to convert 24-hour time to 12-hour format with AM/PM
+function formatTime12Hour(time24) {
+    if (!time24) return '';
+
+    const [hours, minutes] = time24.split(':');
+    let hour = parseInt(hours, 10);
+    const minute = minutes;
+    const ampm = hour >= 12 ? 'PM' : 'AM';
+
+    // Convert to 12-hour format
+    hour = hour % 12;
+    hour = hour ? hour : 12; // the hour '0' should be '12'
+
+    return `${hour}:${minute} ${ampm}`;
+}
+
 // Initialize
 async function init() {
     checkLoginStatus();
@@ -152,14 +168,18 @@ function renderShifts(day, daySchedule) {
             // Sort staff alphabetically
             const sortedStaff = [...entry.staff].sort((a, b) => a.localeCompare(b));
 
+            // Format times to 12-hour format
+            const formattedStartTime = formatTime12Hour(entry.startTime);
+            const formattedEndTime = formatTime12Hour(entry.endTime);
+
             // Create individual tiles for each staff member
             return sortedStaff.map((staffName) => `
                         <div class="shift-entry">
                             <div class="shift-entry-header">
-                                <span class="shift-time" onclick="editStaffTime('${day}', '${shift}', ${entryIndex}, '${escapeHtml(staffName)}')" title="Click to edit time">${entry.startTime} - ${entry.endTime}</span>
+                                <span class="shift-time" title="Time range">${formattedStartTime} - ${formattedEndTime}</span>
                                 <span class="remove-shift" onclick="removeStaffFromShift('${day}', '${shift}', ${entryIndex}, '${escapeHtml(staffName)}')">Remove</span>
                             </div>
-                            <div class="shift-staff">${escapeHtml(staffName)}</div>
+                            <div class="shift-staff" onclick="openEditShiftModal('${day}', '${shift}', ${entryIndex}, '${escapeHtml(staffName)}')" style="cursor: pointer;" title="Click to edit shift">${escapeHtml(staffName)}</div>
                         </div>
                     `).join('');
         }).join('')}
@@ -228,44 +248,29 @@ function renderStaffCheckboxes() {
 }
 
 function saveShift() {
+    const selectedDays = Array.from(document.querySelectorAll('#dayCheckboxes input:checked')).map(cb => cb.value);
+    const selectedStaff = Array.from(document.querySelectorAll('#staffCheckboxes input:checked')).map(cb => cb.value);
     const startTime = document.getElementById('startTime').value;
     const endTime = document.getElementById('endTime').value;
-    const selectedStaff = Array.from(document.querySelectorAll('#staffCheckboxes input:checked'))
-        .map(cb => cb.value);
-    const selectedDays = Array.from(document.querySelectorAll('#dayCheckboxes input:checked'))
-        .map(cb => cb.value);
+    const shiftType = document.getElementById('shiftType').value;
 
-    if (!startTime || !endTime) {
-        alert('Please enter start and end times!');
+    if (selectedDays.length === 0 || selectedStaff.length === 0 || !startTime || !endTime) {
+        alert('Please fill all fields');
         return;
     }
 
-    if (selectedStaff.length === 0) {
-        alert('Please select at least one staff member!');
-        return;
-    }
-
-    if (selectedDays.length === 0) {
-        alert('Please select at least one day!');
-        return;
-    }
-
-    const shift = document.getElementById('shiftType').value;
-
-    // Create independent shift entries for each selected day
     selectedDays.forEach(day => {
         if (!currentSchedule.schedule[day]) {
             currentSchedule.schedule[day] = {};
         }
-        if (!currentSchedule.schedule[day][shift]) {
-            currentSchedule.schedule[day][shift] = [];
+        if (!currentSchedule.schedule[day][shiftType]) {
+            currentSchedule.schedule[day][shiftType] = [];
         }
 
-        // Add the shift entry with all selected staff for this day
-        currentSchedule.schedule[day][shift].push({
+        currentSchedule.schedule[day][shiftType].push({
             startTime,
             endTime,
-            staff: [...selectedStaff] // Create a new array for each day
+            staff: selectedStaff
         });
     });
 
@@ -273,71 +278,14 @@ function saveShift() {
     renderSchedule();
     updateStats();
     saveToLocalStorage();
-
-    // Reset form
-    document.getElementById('startTime').value = '';
-    document.getElementById('endTime').value = '';
 }
 
 function removeStaffFromShift(day, shift, entryIndex, staffName) {
-    if (confirm(`Remove ${staffName} from this shift?`)) {
-        const entry = currentSchedule.schedule[day][shift][entryIndex];
-
-        // Remove the staff member from the array
-        entry.staff = entry.staff.filter(name => name !== staffName);
-
-        // If no staff left in this shift entry, remove the entire entry
-        if (entry.staff.length === 0) {
-            currentSchedule.schedule[day][shift].splice(entryIndex, 1);
-        }
-
-        renderSchedule();
-        updateStats();
-        saveToLocalStorage();
-    }
-}
-
-function editStaffTime(day, shift, entryIndex, staffName) {
     const entry = currentSchedule.schedule[day][shift][entryIndex];
+    entry.staff = entry.staff.filter(name => name !== staffName);
 
-    if (!entry) return;
-
-    // Prompt for new start and end times
-    const newStartTime = prompt(`Edit start time for ${staffName}:`, entry.startTime);
-
-    if (newStartTime === null) return; // User cancelled
-
-    const newEndTime = prompt(`Edit end time for ${staffName}:`, entry.endTime);
-
-    if (newEndTime === null) return; // User cancelled
-
-    // Validate time format (HH:MM)
-    const timeRegex = /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/;
-
-    if (!timeRegex.test(newStartTime) || !timeRegex.test(newEndTime)) {
-        alert('Invalid time format! Please use HH:MM format (e.g., 09:00)');
-        return;
-    }
-
-    // Check if this staff member is the only one with this time slot
-    if (entry.staff.length === 1) {
-        // Just update the existing entry
-        entry.startTime = newStartTime;
-        entry.endTime = newEndTime;
-    } else {
-        // Remove this staff from the current entry
-        entry.staff = entry.staff.filter(name => name !== staffName);
-
-        // Create a new entry for this staff member with the new times
-        if (!currentSchedule.schedule[day][shift]) {
-            currentSchedule.schedule[day][shift] = [];
-        }
-
-        currentSchedule.schedule[day][shift].push({
-            startTime: newStartTime,
-            endTime: newEndTime,
-            staff: [staffName]
-        });
+    if (entry.staff.length === 0) {
+        currentSchedule.schedule[day][shift].splice(entryIndex, 1);
     }
 
     renderSchedule();
@@ -345,15 +293,107 @@ function editStaffTime(day, shift, entryIndex, staffName) {
     saveToLocalStorage();
 }
 
-// Calculations
+// Global variable to store edit context
+let editContext = {
+    day: null,
+    shift: null,
+    entryIndex: null,
+    staffName: null
+};
+
+function openEditShiftModal(day, shift, entryIndex, staffName) {
+    const entry = currentSchedule.schedule[day][shift][entryIndex];
+
+    // Store context
+    editContext = { day, shift, entryIndex, staffName };
+
+    // Populate modal
+    document.getElementById('editStaffName').value = staffName;
+    document.getElementById('editDay').value = day;
+    document.getElementById('editShiftType').value = shift;
+    document.getElementById('editStartTime').value = entry.startTime;
+    document.getElementById('editEndTime').value = entry.endTime;
+
+    openModal('editShiftModal');
+}
+
+function saveEditedShift() {
+    const { day, shift, entryIndex, staffName } = editContext;
+    const newShift = document.getElementById('editShiftType').value;
+    const newStartTime = document.getElementById('editStartTime').value;
+    const newEndTime = document.getElementById('editEndTime').value;
+
+    if (!newStartTime || !newEndTime) {
+        alert('Please fill in both start and end times');
+        return;
+    }
+
+    const entry = currentSchedule.schedule[day][shift][entryIndex];
+    const otherStaff = entry.staff.filter(name => name !== staffName);
+
+    // Remove staff from current entry
+    if (otherStaff.length > 0) {
+        entry.staff = otherStaff;
+    } else {
+        // Remove the entire entry if this was the only staff member
+        currentSchedule.schedule[day][shift].splice(entryIndex, 1);
+    }
+
+    // Add staff to new shift (could be same shift with different times)
+    if (!currentSchedule.schedule[day][newShift]) {
+        currentSchedule.schedule[day][newShift] = [];
+    }
+
+    // Check if there's an existing entry with the same times
+    const existingEntry = currentSchedule.schedule[day][newShift].find(
+        e => e.startTime === newStartTime && e.endTime === newEndTime
+    );
+
+    if (existingEntry) {
+        // Add to existing entry if times match
+        if (!existingEntry.staff.includes(staffName)) {
+            existingEntry.staff.push(staffName);
+        }
+    } else {
+        // Create new entry
+        currentSchedule.schedule[day][newShift].push({
+            startTime: newStartTime,
+            endTime: newEndTime,
+            staff: [staffName]
+        });
+    }
+
+    closeModal('editShiftModal');
+    renderSchedule();
+    updateStats();
+    saveToLocalStorage();
+}
+
+// Statistics
+function updateStats() {
+    const totalHours = calculateTotalHours();
+    document.getElementById('totalHours').textContent = totalHours.toFixed(1);
+    document.getElementById('budgetHours').textContent = currentSchedule.budgetHours.toFixed(1);
+}
+
+function calculateTotalHours() {
+    let total = 0;
+    currentSchedule.days.forEach(day => {
+        total += calculateDayHours(day);
+    });
+    return total;
+}
+
 function calculateDayHours(day) {
+    if (currentSchedule.holidays[day]) return 0;
+
     const daySchedule = currentSchedule.schedule[day] || {};
     let total = 0;
 
     ['Morning', 'Afternoon', 'PM Meeting'].forEach(shift => {
         const entries = daySchedule[shift] || [];
         entries.forEach(entry => {
-            const hours = calculateHours(entry.startTime, entry.endTime);
+            const hours = calculateShiftHours(entry.startTime, entry.endTime);
             total += hours * entry.staff.length;
         });
     });
@@ -361,125 +401,62 @@ function calculateDayHours(day) {
     return total;
 }
 
-function calculateHours(start, end) {
-    const [startH, startM] = start.split(':').map(Number);
-    const [endH, endM] = end.split(':').map(Number);
+function calculateShiftHours(start, end) {
+    const [startHour, startMin] = start.split(':').map(Number);
+    const [endHour, endMin] = end.split(':').map(Number);
 
-    const startMinutes = startH * 60 + startM;
-    const endMinutes = endH * 60 + endM;
+    const startMinutes = startHour * 60 + startMin;
+    const endMinutes = endHour * 60 + endMin;
 
     return (endMinutes - startMinutes) / 60;
-}
-
-function updateStats() {
-    let totalHours = 0;
-    currentSchedule.days.forEach(day => {
-        totalHours += calculateDayHours(day);
-    });
-
-    document.getElementById('totalHours').textContent = totalHours.toFixed(1);
-
-    const budgetElement = document.getElementById('budgetHours');
-    const remaining = currentSchedule.budgetHours - totalHours;
-    budgetElement.textContent = remaining.toFixed(1);
-    budgetElement.classList.toggle('negative', remaining < 0);
 }
 
 // Holidays
 function openHolidaysModal() {
     const container = document.getElementById('holidayDays');
-    container.innerHTML = '';
-
-    currentSchedule.days.forEach(day => {
+    container.innerHTML = currentSchedule.days.map(day => {
         const isHoliday = currentSchedule.holidays[day];
+        return `
+            <label class="checkbox-item ${isHoliday ? 'selected' : ''}">
+                <input type="checkbox" value="${day}" ${isHoliday ? 'checked' : ''}>
+                <span>${day}</span>
+            </label>
+        `;
+    }).join('');
 
-        const label = document.createElement('label');
-        label.className = 'checkbox-item';
-        if (isHoliday) {
-            label.classList.add('selected');
-        }
-
-        const checkbox = document.createElement('input');
-        checkbox.type = 'checkbox';
-        checkbox.value = day;
-        checkbox.checked = isHoliday;
-
-        checkbox.addEventListener('change', function() {
-            if (this.checked) {
-                label.classList.add('selected');
-            } else {
-                label.classList.remove('selected');
-            }
-        });
-
-        const span = document.createElement('span');
-        span.textContent = day;
-
-        label.appendChild(checkbox);
-        label.appendChild(span);
-        container.appendChild(label);
-    });
+    const existingHolidayName = Object.values(currentSchedule.holidays).find(h => h && h !== true);
+    document.getElementById('holidayName').value = existingHolidayName || '';
 
     openModal('holidaysModal');
 }
 
 function saveHoliday() {
-    const name = document.getElementById('holidayName').value.trim();
-    const selectedDays = Array.from(document.querySelectorAll('#holidayDays input:checked'))
-        .map(cb => cb.value);
+    const selectedDays = Array.from(document.querySelectorAll('#holidayDays input:checked')).map(cb => cb.value);
+    const holidayName = document.getElementById('holidayName').value.trim();
 
-    if (!name) {
-        alert('Please enter a holiday/event name!');
-        return;
-    }
+    currentSchedule.holidays = {};
 
-    // Clear previous holidays
-    currentSchedule.days.forEach(day => {
-        if (currentSchedule.holidays[day]) {
-            delete currentSchedule.holidays[day];
-        }
-    });
-
-    // Set new holidays and clear their schedules
     selectedDays.forEach(day => {
-        currentSchedule.holidays[day] = name;
-        // Clear all shifts for this day
-        if (currentSchedule.schedule[day]) {
-            delete currentSchedule.schedule[day];
-        }
+        currentSchedule.holidays[day] = holidayName || true;
     });
 
     closeModal('holidaysModal');
     renderSchedule();
     updateStats();
     saveToLocalStorage();
-
-    document.getElementById('holidayName').value = '';
 }
 
 function clearAllHolidays() {
-    if (!confirm('Clear all holidays? This will restore normal scheduling for all days.')) {
-        return;
+    if (confirm('Clear all holidays?')) {
+        currentSchedule.holidays = {};
+        closeModal('holidaysModal');
+        renderSchedule();
+        updateStats();
+        saveToLocalStorage();
     }
-
-    // Clear all holidays
-    currentSchedule.holidays = {};
-
-    // Uncheck and remove selected class from all checkboxes
-    const checkboxes = document.querySelectorAll('#holidayDays input[type="checkbox"]');
-    checkboxes.forEach(checkbox => {
-        checkbox.checked = false;
-        checkbox.parentElement.classList.remove('selected');
-    });
-
-    closeModal('holidaysModal');
-    renderSchedule();
-    saveToLocalStorage();
-
-    document.getElementById('holidayName').value = '';
 }
 
-// Templates
+// Template Management
 function openTemplateModal() {
     renderTemplateList();
     openModal('templateModal');
@@ -491,492 +468,279 @@ function renderTemplateList() {
     const emptyState = document.getElementById('emptyTemplateState');
 
     if (templates.length === 0) {
-        container.style.display = 'none';
+        container.innerHTML = '';
         emptyState.style.display = 'block';
         return;
     }
 
-    container.style.display = 'flex';
     emptyState.style.display = 'none';
-
-    // Reverse to show newest first
-    const sortedTemplates = [...templates].reverse();
-
-    container.innerHTML = sortedTemplates.map((template, displayIndex) => {
-        // Calculate actual index in original array
-        const actualIndex = templates.length - 1 - displayIndex;
-
-        // Use stored totalHours if available, otherwise calculate
-        const totalHours = template.totalHours !== undefined ? template.totalHours : calculateTemplateHours(template);
-
-        const isActive = currentSchedule.activeTemplateId === actualIndex;
-
-        return `
-            <div class="template-item ${isActive ? 'active-template' : ''}" onclick="loadTemplate(${actualIndex})">
-                <div class="template-info">
-                    <div class="template-name">
-                        ${escapeHtml(template.name)}
-                        ${isActive ? '<span style="color: #948d71; font-size: 12px; margin-left: 8px;">● ACTIVE</span>' : ''}
-                    </div>
-                    <div class="template-meta">
-                        ${totalHours.toFixed(1)}h | Budget: ${template.budgetHours}h
-                    </div>
-                </div>
-                <div class="template-actions">
-                    <button class="btn btn-secondary" onclick="editTemplateBudget(event, ${actualIndex})" style="font-size: 12px; padding: 6px 12px;">Edit Budget</button>
-                    ${!isActive ? `<button class="btn btn-danger" onclick="deleteTemplate(event, ${actualIndex})">Delete</button>` : ''}
-                </div>
+    container.innerHTML = templates.map((template, index) => `
+        <div class="template-item ${currentSchedule.activeTemplateId === index ? 'active' : ''}">
+            <div class="template-content" onclick="loadTemplate(${index})">
+                <div class="template-title">${escapeHtml(template.name)}</div>
+                <div class="template-info">${template.dateRange} | ${template.budgetHours}h budget</div>
             </div>
-        `;
-    }).join('');
+            <div class="template-actions">
+                <button class="template-btn" onclick="event.stopPropagation(); renameTemplate(${index})" title="Rename">✏️</button>
+                <button class="template-btn" onclick="event.stopPropagation(); deleteTemplate(${index})" title="Delete">🗑️</button>
+            </div>
+        </div>
+    `).join('');
 }
 
-function calculateTemplateHours(template) {
-    let total = 0;
-    template.days.forEach(day => {
-        const daySchedule = template.schedule[day] || {};
-        ['Morning', 'Afternoon', 'PM Meeting'].forEach(shift => {
-            const entries = daySchedule[shift] || [];
-            entries.forEach(entry => {
-                const hours = calculateHours(entry.startTime, entry.endTime);
-                total += hours * entry.staff.length;
-            });
-        });
-    });
-    return total;
+function loadTemplate(index) {
+    const templates = JSON.parse(localStorage.getItem('scheduleTemplates') || '[]');
+    if (!templates[index]) return;
+
+    const template = templates[index];
+
+    currentSchedule.activeTemplateId = index;
+    currentSchedule.staff = [...template.staff];
+    currentSchedule.schedule = JSON.parse(JSON.stringify(template.schedule));
+    currentSchedule.holidays = {...template.holidays};
+    currentSchedule.budgetHours = template.budgetHours;
+
+    renderStaffList();
+    renderSchedule();
+    updateStats();
+    saveToLocalStorage();
+    showScheduleView();
+    closeModal('templateModal');
+}
+
+function deleteTemplate(index) {
+    const templates = JSON.parse(localStorage.getItem('scheduleTemplates') || '[]');
+    if (!templates[index]) return;
+
+    if (!confirm(`Delete template "${templates[index].name}"?`)) return;
+
+    templates.splice(index, 1);
+    localStorage.setItem('scheduleTemplates', JSON.stringify(templates));
+
+    if (currentSchedule.activeTemplateId === index) {
+        currentSchedule.activeTemplateId = null;
+    } else if (currentSchedule.activeTemplateId > index) {
+        currentSchedule.activeTemplateId--;
+    }
+
+    saveToLocalStorage();
+    renderTemplateList();
+}
+
+function renameTemplate(index) {
+    const templates = JSON.parse(localStorage.getItem('scheduleTemplates') || '[]');
+    if (!templates[index]) return;
+
+    const newName = prompt('Enter new template name:', templates[index].name);
+    if (!newName || newName.trim() === '') return;
+
+    templates[index].name = newName.trim();
+    localStorage.setItem('scheduleTemplates', JSON.stringify(templates));
+
+    saveToLocalStorage();
+    renderTemplateList();
 }
 
 function openCreateTemplateModal() {
     openModal('createTemplateModal');
 }
 
-function saveCurrentSchedule() {
-    // Save to the active template
-    saveCurrentTemplateToStorage();
-
-    // Save to current schedule localStorage
-    saveToLocalStorage();
-    alert('Schedule saved successfully!');
-}
-
 function confirmCreateTemplate() {
     const startDate = document.getElementById('templateStartDate').value;
     const endDate = document.getElementById('templateEndDate').value;
-    const budget = parseFloat(document.getElementById('templateBudget').value);
+    const budgetHours = parseFloat(document.getElementById('templateBudget').value) || 0;
 
-    if (!startDate || !endDate) {
-        alert('Please enter both start and end dates!');
+    if (!startDate || !endDate || budgetHours <= 0) {
+        alert('Please fill all fields with valid values');
         return;
     }
 
-    if (!budget || budget <= 0) {
-        alert('Please enter a valid budget hours!');
+    const start = new Date(startDate + 'T00:00:00');
+    const end = new Date(endDate + 'T00:00:00');
+
+    if (start >= end) {
+        alert('End date must be after start date');
         return;
     }
 
-    // Save current template before creating new one
-    if (currentSchedule.activeTemplateId !== null) {
-        saveCurrentTemplateToStorage();
-    }
-
-    // Format dates to "Month Day (Year) - Month Day (Year)"
-    const start = new Date(startDate);
-    const end = new Date(endDate);
-
+    // Format dates consistently (MM/DD/YYYY)
     const formatDate = (date) => {
-        const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-        return `${months[date.getMonth()]} ${date.getDate()} (${date.getFullYear()})`;
+        const month = (date.getMonth() + 1).toString().padStart(2, '0');
+        const day = date.getDate().toString().padStart(2, '0');
+        const year = date.getFullYear();
+        return `${month}/${day}/${year}`;
     };
 
-    const name = `${formatDate(start)} - ${formatDate(end)}`;
+    const dateRange = `${formatDate(start)} - ${formatDate(end)}`;
+    const templateName = dateRange;
 
-    const templates = JSON.parse(localStorage.getItem('scheduleTemplates') || '[]');
-
-    // Create new template with empty/current schedule
-    const newTemplate = {
-        name,
-        startDate,
-        endDate,
-        budgetHours: budget,
-        totalHours: 0,
-        staff: [],
-        days: [...currentSchedule.days],
-        schedule: {},
-        holidays: {},
-        savedDate: new Date().toISOString()
-    };
-
-    templates.push(newTemplate);
-
-    // Set this template as active and clear current schedule
-    currentSchedule.activeTemplateId = templates.length - 1;
-    currentSchedule.budgetHours = budget;
+    currentSchedule.budgetHours = budgetHours;
     currentSchedule.staff = [];
     currentSchedule.schedule = {};
     currentSchedule.holidays = {};
 
+    const templates = JSON.parse(localStorage.getItem('scheduleTemplates') || '[]');
+    const newTemplateIndex = templates.length;
+
+    templates.push({
+        name: templateName,
+        dateRange: dateRange,
+        budgetHours: budgetHours,
+        staff: [],
+        schedule: {},
+        holidays: {},
+        createdAt: new Date().toISOString()
+    });
+
     localStorage.setItem('scheduleTemplates', JSON.stringify(templates));
 
-    closeModal('createTemplateModal');
-    renderStaffList();
-    renderSchedule();
-    updateStats();
-    saveToLocalStorage();
-
-    // Show the schedule view
-    showScheduleView();
-
-    alert('Template created successfully! You can now add staff and create schedules.');
+    currentSchedule.activeTemplateId = newTemplateIndex;
 
     document.getElementById('templateStartDate').value = '';
     document.getElementById('templateEndDate').value = '';
     document.getElementById('templateBudget').value = '';
-}
 
-function loadTemplate(index) {
-    // Save current template before switching
-    if (currentSchedule.activeTemplateId !== null) {
-        saveCurrentTemplateToStorage();
-    }
-
-    const templates = JSON.parse(localStorage.getItem('scheduleTemplates') || '[]');
-    const template = templates[index];
-
-    if (!template) return;
-
-    currentSchedule.staff = [...template.staff];
-    currentSchedule.schedule = JSON.parse(JSON.stringify(template.schedule));
-    currentSchedule.holidays = {...template.holidays};
-    currentSchedule.budgetHours = template.budgetHours;
-    currentSchedule.activeTemplateId = index;
-
-    closeModal('templateModal');
+    closeModal('createTemplateModal');
+    showScheduleView();
     renderStaffList();
     renderSchedule();
     updateStats();
     saveToLocalStorage();
-
-    // Show the schedule view
-    showScheduleView();
 }
 
-// Helper function to save current template to storage
+function saveCurrentSchedule() {
+    if (currentSchedule.activeTemplateId === null) {
+        alert('No active template to save to. Please create a template first.');
+        return;
+    }
+
+    const templates = JSON.parse(localStorage.getItem('scheduleTemplates') || '[]');
+    const template = templates[currentSchedule.activeTemplateId];
+
+    if (!template) {
+        alert('Template not found.');
+        return;
+    }
+
+    template.staff = [...currentSchedule.staff];
+    template.schedule = JSON.parse(JSON.stringify(currentSchedule.schedule));
+    template.holidays = {...currentSchedule.holidays};
+    template.budgetHours = currentSchedule.budgetHours;
+    template.lastModified = new Date().toISOString();
+
+    localStorage.setItem('scheduleTemplates', JSON.stringify(templates));
+
+    saveToDatabase();
+
+    alert(`Template "${template.name}" saved successfully!`);
+}
+
 function saveCurrentTemplateToStorage() {
     if (currentSchedule.activeTemplateId === null) return;
 
     const templates = JSON.parse(localStorage.getItem('scheduleTemplates') || '[]');
     const template = templates[currentSchedule.activeTemplateId];
 
-    if (template) {
-        // Calculate total hours
-        let totalHours = 0;
-        currentSchedule.days.forEach(day => {
-            totalHours += calculateDayHours(day);
-        });
-
-        // Update the template with current schedule
-        template.totalHours = totalHours;
-        template.staff = [...currentSchedule.staff];
-        template.schedule = JSON.parse(JSON.stringify(currentSchedule.schedule));
-        template.holidays = {...currentSchedule.holidays};
-        template.budgetHours = currentSchedule.budgetHours;
-
-        templates[currentSchedule.activeTemplateId] = template;
-        localStorage.setItem('scheduleTemplates', JSON.stringify(templates));
-    }
-}
-
-function deleteTemplate(event, index) {
-    event.stopPropagation();
-
-    if (!confirm('Delete this template?')) return;
-
-    const templates = JSON.parse(localStorage.getItem('scheduleTemplates') || '[]');
-    templates.splice(index, 1);
-    localStorage.setItem('scheduleTemplates', JSON.stringify(templates));
-
-    // If deleted template was active or before active, adjust active ID
-    if (currentSchedule.activeTemplateId !== null) {
-        if (currentSchedule.activeTemplateId === index) {
-            currentSchedule.activeTemplateId = null;
-        } else if (currentSchedule.activeTemplateId > index) {
-            currentSchedule.activeTemplateId--;
-        }
-        saveToLocalStorage();
-    }
-
-    renderTemplateList();
-}
-
-function editTemplateBudget(event, index) {
-    event.stopPropagation();
-
-    const templates = JSON.parse(localStorage.getItem('scheduleTemplates') || '[]');
-    const template = templates[index];
-
     if (!template) return;
 
-    const newBudget = prompt(`Edit budget hours for ${template.name}:`, template.budgetHours);
+    template.staff = [...currentSchedule.staff];
+    template.schedule = JSON.parse(JSON.stringify(currentSchedule.schedule));
+    template.holidays = {...currentSchedule.holidays};
+    template.budgetHours = currentSchedule.budgetHours;
+    template.lastModified = new Date().toISOString();
 
-    if (newBudget === null) return; // User cancelled
-
-    const budgetNum = parseFloat(newBudget);
-
-    if (isNaN(budgetNum) || budgetNum <= 0) {
-        alert('Please enter a valid budget hours!');
-        return;
-    }
-
-    // Update template budget
-    template.budgetHours = budgetNum;
-    templates[index] = template;
     localStorage.setItem('scheduleTemplates', JSON.stringify(templates));
-
-    // If this is the active template, update current schedule budget
-    if (currentSchedule.activeTemplateId === index) {
-        currentSchedule.budgetHours = budgetNum;
-        updateStats();
-        saveToLocalStorage();
-    }
-
-    renderTemplateList();
 }
 
 // PDF Generation
 function generatePDF() {
     const { jsPDF } = window.jspdf;
-    const doc = new jsPDF('l', 'mm', 'a4'); // Landscape A4
+    const doc = new jsPDF('landscape');
 
-    // Get active template name and dates
-    let templateName = 'Weekly Schedule';
-    let dateRange = '';
-    if (currentSchedule.activeTemplateId !== null) {
-        const templates = JSON.parse(localStorage.getItem('scheduleTemplates') || '[]');
-        const template = templates[currentSchedule.activeTemplateId];
-        if (template) {
-            dateRange = template.name;
-        }
-    }
+    const shifts = ['Morning', 'Afternoon', 'PM Meeting'];
+    const days = currentSchedule.days;
 
-    // Helper function to convert 24h to 12h format
-    function format12Hour(time24) {
-        if (!time24) return '';
-        const [hours, minutes] = time24.split(':');
-        let h = parseInt(hours);
-        const ampm = h >= 12 ? 'pm' : 'am';
-        h = h % 12 || 12;
-        return `${h}:${minutes}${ampm}`;
-    }
+    const templates = JSON.parse(localStorage.getItem('scheduleTemplates') || '[]');
+    const template = templates[currentSchedule.activeTemplateId];
+    const dateRange = template ? template.dateRange : 'No Date Range';
 
-    // Helper function to determine correct shift based on start time
-    function getShiftByTime(startTime) {
-        if (!startTime) return 'Morning';
-        const [hours] = startTime.split(':');
-        const hour = parseInt(hours);
-
-        // Morning: 5am - 11:59am
-        if (hour >= 5 && hour < 12) return 'Morning';
-        // Afternoon: 12pm - 4:59pm
-        if (hour >= 12 && hour < 17) return 'Afternoon';
-        // PM Meeting: 5pm onwards or very early (before 5am)
-        return 'PM Meeting';
-    }
-
-    // Reorganize all schedule entries by actual time (not by original category)
-    // BUT keep PM Meeting in its original category since it's a meeting type, not time-based
-    const reorganizedSchedule = {};
-
-    currentSchedule.days.forEach(day => {
-        reorganizedSchedule[day] = {
-            'Morning': [],
-            'Afternoon': [],
-            'PM Meeting': []
-        };
-
-        if (currentSchedule.schedule[day]) {
-            // Go through all shift types
-            ['Morning', 'Afternoon', 'PM Meeting'].forEach(originalShift => {
-                const entries = currentSchedule.schedule[day][originalShift] || [];
-                entries.forEach(entry => {
-                    // PM Meeting should always stay as PM Meeting, regardless of start time
-                    // Only reorganize Morning and Afternoon shifts based on their actual times
-                    let correctShift;
-                    if (originalShift === 'PM Meeting') {
-                        correctShift = 'PM Meeting';
-                    } else {
-                        correctShift = getShiftByTime(entry.startTime);
-                    }
-                    reorganizedSchedule[day][correctShift].push(entry);
-                });
-            });
-        }
-    });
-
-    // Title
-    doc.setFontSize(20);
-    doc.setFont(undefined, 'bold');
-    doc.text('Schedule', 148, 15, { align: 'center' });
-
-    // Date Range - Bigger and more prominent
     doc.setFontSize(16);
     doc.setFont(undefined, 'bold');
-    doc.text(dateRange, 148, 26, { align: 'center' });
+    doc.text(`Staff Schedule - ${dateRange}`, 148, 15, { align: 'center' });
 
-    // Grid Setup
-    const startY = 35;
-    const startX = 20;
-    const staffColWidth = 30;
-    const dayWidth = 45;
-    const headerHeight = 10;
-    const cellHeight = 10;
-    // Explicitly define days to ensure they're always there
-    const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
+    const startX = 10;
+    let currentY = 25;
 
-    let currentY = startY;
-
-    // Process each shift
-    const shifts = ['Morning', 'Afternoon', 'PM Meeting'];
-
-    shifts.forEach((shiftType, shiftIndex) => {
-        // Shift Type Label (centered above the table)
-        doc.setFontSize(14);
-        doc.setFont(undefined, 'bold');
-        doc.setTextColor(51, 51, 51);
-        doc.text(shiftType, 148, currentY + 5, { align: 'center' });
-        currentY += 10;
-
-        // Collect all unique staff for this shift across all days
-        const staffSchedules = {};
+    shifts.forEach((shift, shiftIndex) => {
+        const staffInShift = new Set();
+        const shiftSchedules = {};
 
         days.forEach(day => {
-            const isHoliday = currentSchedule.holidays[day];
-            const entries = reorganizedSchedule[day]?.[shiftType] || [];
+            const daySchedule = currentSchedule.schedule[day] || {};
+            const entries = daySchedule[shift] || [];
 
             entries.forEach(entry => {
                 entry.staff.forEach(staffName => {
-                    if (!staffSchedules[staffName]) {
-                        staffSchedules[staffName] = {};
+                    staffInShift.add(staffName);
+
+                    if (!shiftSchedules[staffName]) {
+                        shiftSchedules[staffName] = {};
                     }
 
-                    if (isHoliday) {
-                        staffSchedules[staffName][day] = 'OFF';
+                    const holidayName = currentSchedule.holidays[day];
+                    if (holidayName) {
+                        shiftSchedules[staffName][day] = 'OFF';
                     } else {
-                        const timeRange = `${format12Hour(entry.startTime)}- ${format12Hour(entry.endTime)}`;
-                        // If staff already has a time for this day, append with newline
-                        if (staffSchedules[staffName][day] && staffSchedules[staffName][day] !== 'OFF') {
-                            staffSchedules[staffName][day] += `\n${timeRange}`;
-                        } else {
-                            staffSchedules[staffName][day] = timeRange;
-                        }
+                        const formattedTime = `${formatTime12Hour(entry.startTime)} - ${formatTime12Hour(entry.endTime)}`;
+                        shiftSchedules[staffName][day] = formattedTime;
                     }
                 });
             });
-
-            // Mark holidays for staff without entries
-            if (isHoliday) {
-                Object.keys(staffSchedules).forEach(staffName => {
-                    if (!staffSchedules[staffName][day]) {
-                        staffSchedules[staffName][day] = 'OFF';
-                    }
-                });
-            }
         });
 
-        // If no staff for this shift, show empty row with headers
-        if (Object.keys(staffSchedules).length === 0) {
-            // Draw header row
-            doc.setFillColor(255, 255, 255); // White background
-            doc.setDrawColor(0, 0, 0); // Black borders
-            doc.setFontSize(11);
+        if (staffInShift.size > 0) {
+            doc.setFontSize(12);
             doc.setFont(undefined, 'bold');
+            doc.text(shift, startX, currentY);
+            currentY += 7;
 
-            // Draw all header rectangles first
-            doc.rect(startX, currentY, staffColWidth, headerHeight, 'FD'); // Staff header
-            days.forEach((day, index) => {
-                const x = startX + staffColWidth + (index * dayWidth);
-                doc.rect(x, currentY, dayWidth, headerHeight, 'FD');
-            });
+            const staffColWidth = 40;
+            const dayWidth = (287 - startX - staffColWidth) / days.length;
+            const cellHeight = 12;
 
-            // Now draw all text on top
-            doc.setTextColor(0, 0, 0); // Black text
-            doc.text('Staff', startX + staffColWidth / 2, currentY + 7, { align: 'center' });
-            days.forEach((day, index) => {
-                const x = startX + staffColWidth + (index * dayWidth);
-                doc.text(day, x + dayWidth / 2, currentY + 7, { align: 'center' });
-            });
-
-            currentY += headerHeight;
-
-            // Empty row with "---" indicator
-            doc.setFont(undefined, 'normal');
-            doc.setFontSize(10);
-            doc.setTextColor(0, 0, 0);
-
-            // Draw staff cell
-            doc.rect(startX, currentY, staffColWidth, cellHeight, 'FD');
-
-            // Draw day cells with "---" in each
-            days.forEach((day, index) => {
-                const x = startX + staffColWidth + (index * dayWidth);
-                doc.rect(x, currentY, dayWidth, cellHeight, 'FD');
-                doc.text('---', x + dayWidth / 2, currentY + 7, { align: 'center' });
-            });
-
-            currentY += cellHeight + 15;
-        } else {
-            // Draw header row (Staff + Days)
-            doc.setFillColor(255, 255, 255); // White background
-            doc.setDrawColor(0, 0, 0); // Black borders
-            doc.setFontSize(11);
-            doc.setFont(undefined, 'bold');
-
-            // Draw all header rectangles first
-            doc.rect(startX, currentY, staffColWidth, headerHeight, 'FD'); // Staff header
-            days.forEach((day, index) => {
-                const x = startX + staffColWidth + (index * dayWidth);
-                doc.rect(x, currentY, dayWidth, headerHeight, 'FD');
-            });
-
-            // Now draw all text on top
-            doc.setTextColor(0, 0, 0); // Black text
-            doc.text('Staff', startX + staffColWidth / 2, currentY + 7, { align: 'center' });
-            days.forEach((day, index) => {
-                const x = startX + staffColWidth + (index * dayWidth);
-                doc.text(day, x + dayWidth / 2, currentY + 7, { align: 'center' });
-            });
-
-            currentY += headerHeight;
-
-            // Draw staff rows
             doc.setFontSize(9);
-            doc.setFont(undefined, 'normal');
-            doc.setTextColor(0, 0, 0); // Black text
+            doc.setFont(undefined, 'bold');
+            doc.setFillColor(200, 200, 200);
+            doc.rect(startX, currentY, staffColWidth, cellHeight, 'F');
+            doc.text('Staff', startX + 2, currentY + 8);
 
-            // Sort staff alphabetically
-            const sortedStaff = Object.keys(staffSchedules).sort();
+            days.forEach((day, index) => {
+                const x = startX + staffColWidth + (index * dayWidth);
+                doc.rect(x, currentY, dayWidth, cellHeight, 'F');
+                doc.text(day.substring(0, 3), x + dayWidth / 2, currentY + 8, { align: 'center' });
+            });
 
-            sortedStaff.forEach(staffName => {
-                const schedule = staffSchedules[staffName];
+            currentY += cellHeight;
 
-                // Calculate the maximum cell height needed for this row
-                let maxCellHeight = cellHeight;
-                days.forEach(day => {
-                    const timeOrOff = schedule[day] || '';
-                    if (timeOrOff && timeOrOff !== 'OFF') {
-                        const timeLines = timeOrOff.split('\n');
-                        const neededHeight = timeLines.length > 1 ? cellHeight * timeLines.length : cellHeight;
-                        maxCellHeight = Math.max(maxCellHeight, neededHeight);
-                    }
-                });
+            const sortedStaff = Array.from(staffInShift).sort((a, b) => a.localeCompare(b));
 
-                // Staff name cell
-                doc.setFillColor(255, 255, 255); // White background
+            sortedStaff.forEach((staffName) => {
+                const schedule = shiftSchedules[staffName] || {};
+
+                const scheduleEntries = days.map(day => schedule[day] || '');
+                const maxLines = Math.max(...scheduleEntries.map(entry => {
+                    if (!entry) return 1;
+                    return entry.split('\n').length;
+                }));
+
+                const maxCellHeight = Math.max(cellHeight, maxLines * cellHeight);
+
+                doc.setFillColor(255, 255, 255);
                 doc.rect(startX, currentY, staffColWidth, maxCellHeight, 'FD');
-                doc.setTextColor(0, 0, 0); // Black text
                 doc.setFont(undefined, 'bold');
-                doc.text(staffName, startX + staffColWidth / 2, currentY + maxCellHeight / 2 + 2, { align: 'center' });
+                doc.setFontSize(9);
+                doc.text(staffName, startX + 2, currentY + maxCellHeight / 2 + 2);
 
-                // Day cells
                 doc.setFont(undefined, 'normal');
                 days.forEach((day, index) => {
                     const x = startX + staffColWidth + (index * dayWidth);
@@ -984,34 +748,30 @@ function generatePDF() {
                     const holidayName = currentSchedule.holidays[day];
 
                     if (timeOrOff === 'OFF' || holidayName) {
-                        doc.setFillColor(255, 255, 255); // White background
+                        doc.setFillColor(255, 255, 255);
                         doc.rect(x, currentY, dayWidth, maxCellHeight, 'FD');
-                        doc.setTextColor(0, 0, 0); // Black text
+                        doc.setTextColor(0, 0, 0);
                         doc.setFont(undefined, 'bold');
                         doc.setFontSize(9);
 
-                        // Show "Off" text
                         if (holidayName && holidayName !== true) {
-                            // If there's a holiday name, show it smaller below "Off"
                             doc.text('Off', x + dayWidth / 2, currentY + maxCellHeight / 2 - 1, { align: 'center' });
                             doc.setFont(undefined, 'normal');
                             doc.setFontSize(7);
                             doc.text(holidayName, x + dayWidth / 2, currentY + maxCellHeight / 2 + 3, { align: 'center' });
                             doc.setFontSize(9);
                         } else {
-                            // Just "Off" centered
                             doc.text('Off', x + dayWidth / 2, currentY + maxCellHeight / 2 + 2, { align: 'center' });
                         }
 
                         doc.setFont(undefined, 'normal');
-                        doc.setTextColor(0, 0, 0); // Black text
+                        doc.setTextColor(0, 0, 0);
                     } else {
-                        doc.setFillColor(255, 255, 255); // White background
+                        doc.setFillColor(255, 255, 255);
                         doc.rect(x, currentY, dayWidth, maxCellHeight, 'FD');
                         if (timeOrOff) {
-                            doc.setTextColor(0, 0, 0); // Black text
+                            doc.setTextColor(0, 0, 0);
                             doc.setFontSize(8);
-                            // Handle multiple time entries
                             const timeLines = timeOrOff.split('\n');
                             if (timeLines.length > 1) {
                                 let textY = currentY + 6;
@@ -1029,17 +789,15 @@ function generatePDF() {
                 currentY += maxCellHeight;
             });
 
-            currentY += 15; // Space between shifts
+            currentY += 15;
         }
 
-        // Check if we need a new page
         if (currentY > 170 && shiftIndex < shifts.length - 1) {
             doc.addPage();
             currentY = 20;
         }
     });
 
-    // Footer
     doc.setFontSize(8);
     doc.setTextColor(102, 102, 102);
     const pageCount = doc.internal.getNumberOfPages();
@@ -1066,7 +824,6 @@ function clearSchedule() {
     updateStats();
     saveToLocalStorage();
 
-    // Return to welcome screen
     document.getElementById('welcomeScreen').style.display = 'flex';
     document.getElementById('scheduleView').style.display = 'none';
 }
@@ -1084,11 +841,9 @@ function closeModal(id) {
 
 function saveToLocalStorage() {
     localStorage.setItem('currentSchedule', JSON.stringify(currentSchedule));
-    // Also auto-save to active template if one exists
     if (currentSchedule.activeTemplateId !== null) {
         saveCurrentTemplateToStorage();
     }
-    // Save to cloud
     saveToDatabase();
 }
 

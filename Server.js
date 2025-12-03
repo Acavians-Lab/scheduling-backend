@@ -72,8 +72,15 @@ function authMiddleware(req, res, next) {
     }
 }
 
-// ---------- OPTION A: MANUALLY CREATE USERS ----------
-// Run this ONCE (e.g. via Postman or temporarily uncomment) to create your 2 accounts.
+// ---------- CREATE USERS (RUN ONCE TO SETUP) ----------
+// To create the users, send a POST request to /api/admin/create-user with:
+// {
+//   "adminKey": "YOUR_ADMIN_KEY_FROM_ENV",
+//   "username": "ginaa.lee",
+//   "password": "9163709968"
+// }
+// Then do the same for lawrence with passcode 9254454907
+
 app.post('/api/admin/create-user', async (req, res) => {
     const { adminKey, username, password } = req.body;
 

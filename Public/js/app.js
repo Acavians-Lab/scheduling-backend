@@ -463,7 +463,7 @@ function openTemplateModal() {
 }
 
 function renderTemplateList() {
-    const templates = JSON.parse(localStorage.getItem('scheduleTemplates') || '[]');
+    const templates = JSON.parse(localStorage.getItem(getUserStorageKey('scheduleTemplates')) || '[]');
     const container = document.getElementById('templateList');
     const emptyState = document.getElementById('emptyTemplateState');
 
@@ -489,7 +489,7 @@ function renderTemplateList() {
 }
 
 function loadTemplate(index) {
-    const templates = JSON.parse(localStorage.getItem('scheduleTemplates') || '[]');
+    const templates = JSON.parse(localStorage.getItem(getUserStorageKey('scheduleTemplates')) || '[]');
     if (!templates[index]) return;
 
     const template = templates[index];
@@ -509,13 +509,13 @@ function loadTemplate(index) {
 }
 
 function deleteTemplate(index) {
-    const templates = JSON.parse(localStorage.getItem('scheduleTemplates') || '[]');
+    const templates = JSON.parse(localStorage.getItem(getUserStorageKey('scheduleTemplates')) || '[]');
     if (!templates[index]) return;
 
     if (!confirm(`Delete template "${templates[index].name}"?`)) return;
 
     templates.splice(index, 1);
-    localStorage.setItem('scheduleTemplates', JSON.stringify(templates));
+    localStorage.setItem(getUserStorageKey('scheduleTemplates'), JSON.stringify(templates));
 
     if (currentSchedule.activeTemplateId === index) {
         currentSchedule.activeTemplateId = null;
@@ -528,14 +528,14 @@ function deleteTemplate(index) {
 }
 
 function renameTemplate(index) {
-    const templates = JSON.parse(localStorage.getItem('scheduleTemplates') || '[]');
+    const templates = JSON.parse(localStorage.getItem(getUserStorageKey('scheduleTemplates')) || '[]');
     if (!templates[index]) return;
 
     const newName = prompt('Enter new template name:', templates[index].name);
     if (!newName || newName.trim() === '') return;
 
     templates[index].name = newName.trim();
-    localStorage.setItem('scheduleTemplates', JSON.stringify(templates));
+    localStorage.setItem(getUserStorageKey('scheduleTemplates'), JSON.stringify(templates));
 
     saveToLocalStorage();
     renderTemplateList();
@@ -579,7 +579,7 @@ function confirmCreateTemplate() {
     currentSchedule.schedule = {};
     currentSchedule.holidays = {};
 
-    const templates = JSON.parse(localStorage.getItem('scheduleTemplates') || '[]');
+    const templates = JSON.parse(localStorage.getItem(getUserStorageKey('scheduleTemplates')) || '[]');
     const newTemplateIndex = templates.length;
 
     templates.push({
@@ -592,7 +592,7 @@ function confirmCreateTemplate() {
         createdAt: new Date().toISOString()
     });
 
-    localStorage.setItem('scheduleTemplates', JSON.stringify(templates));
+    localStorage.setItem(getUserStorageKey('scheduleTemplates'), JSON.stringify(templates));
 
     currentSchedule.activeTemplateId = newTemplateIndex;
 
@@ -614,7 +614,7 @@ function saveCurrentSchedule() {
         return;
     }
 
-    const templates = JSON.parse(localStorage.getItem('scheduleTemplates') || '[]');
+    const templates = JSON.parse(localStorage.getItem(getUserStorageKey('scheduleTemplates')) || '[]');
     const template = templates[currentSchedule.activeTemplateId];
 
     if (!template) {
@@ -628,7 +628,7 @@ function saveCurrentSchedule() {
     template.budgetHours = currentSchedule.budgetHours;
     template.lastModified = new Date().toISOString();
 
-    localStorage.setItem('scheduleTemplates', JSON.stringify(templates));
+    localStorage.setItem(getUserStorageKey('scheduleTemplates'), JSON.stringify(templates));
 
     saveToDatabase();
 
@@ -638,7 +638,7 @@ function saveCurrentSchedule() {
 function saveCurrentTemplateToStorage() {
     if (currentSchedule.activeTemplateId === null) return;
 
-    const templates = JSON.parse(localStorage.getItem('scheduleTemplates') || '[]');
+    const templates = JSON.parse(localStorage.getItem(getUserStorageKey('scheduleTemplates')) || '[]');
     const template = templates[currentSchedule.activeTemplateId];
 
     if (!template) return;
@@ -649,7 +649,7 @@ function saveCurrentTemplateToStorage() {
     template.budgetHours = currentSchedule.budgetHours;
     template.lastModified = new Date().toISOString();
 
-    localStorage.setItem('scheduleTemplates', JSON.stringify(templates));
+    localStorage.setItem(getUserStorageKey('scheduleTemplates'), JSON.stringify(templates));
 }
 
 // PDF Generation
@@ -660,7 +660,7 @@ function generatePDF() {
     const shifts = ['Morning', 'Afternoon', 'PM Meeting'];
     const days = currentSchedule.days;
 
-    const templates = JSON.parse(localStorage.getItem('scheduleTemplates') || '[]');
+    const templates = JSON.parse(localStorage.getItem(getUserStorageKey('scheduleTemplates')) || '[]');
     const template = templates[currentSchedule.activeTemplateId];
     const dateRange = template ? template.dateRange : 'No Date Range';
 
@@ -837,10 +837,16 @@ function closeModal(id) {
     document.getElementById(id).classList.remove('active');
 }
 
-// Local Storage
+// Local Storage - User-specific keys
+
+function getUserStorageKey(baseKey) {
+    const username = localStorage.getItem('username') || 'default';
+    return `${baseKey}_${username}`;
+}
 
 function saveToLocalStorage() {
-    localStorage.setItem('currentSchedule', JSON.stringify(currentSchedule));
+    const storageKey = getUserStorageKey('currentSchedule');
+    localStorage.setItem(storageKey, JSON.stringify(currentSchedule));
     if (currentSchedule.activeTemplateId !== null) {
         saveCurrentTemplateToStorage();
     }
@@ -848,7 +854,8 @@ function saveToLocalStorage() {
 }
 
 function loadFromLocalStorage() {
-    const saved = localStorage.getItem('currentSchedule');
+    const storageKey = getUserStorageKey('currentSchedule');
+    const saved = localStorage.getItem(storageKey);
     if (saved) {
         const data = JSON.parse(saved);
         currentSchedule.staff = data.staff || [];
@@ -884,11 +891,11 @@ async function loadFromDatabase() {
             const data = await response.json();
 
             if (data.allSchedules && data.allSchedules.length > 0) {
-                localStorage.setItem('scheduleTemplates', JSON.stringify(data.allSchedules));
+                localStorage.setItem(getUserStorageKey('scheduleTemplates'), JSON.stringify(data.allSchedules));
             }
 
             if (data.currentScheduleId !== null) {
-                const templates = JSON.parse(localStorage.getItem('scheduleTemplates') || '[]');
+                const templates = JSON.parse(localStorage.getItem(getUserStorageKey('scheduleTemplates')) || '[]');
                 const template = templates[data.currentScheduleId];
                 if (template) {
                     currentSchedule.activeTemplateId = data.currentScheduleId;
@@ -915,7 +922,7 @@ async function saveToDatabase() {
             ? 'http://localhost:3000/api/schedule'
             : '/api/schedule';
 
-        const templates = JSON.parse(localStorage.getItem('scheduleTemplates') || '[]');
+        const templates = JSON.parse(localStorage.getItem(getUserStorageKey('scheduleTemplates')) || '[]');
 
         await fetch(url, {
             method: 'POST',

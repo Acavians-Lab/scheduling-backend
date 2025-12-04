@@ -668,7 +668,7 @@ function generatePDF() {
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF('landscape');
 
-    const shifts = ['Morning', 'Afternoon', 'PM Meeting'];
+    const shifts = ['Morning', 'Afternoon']; // Only generate Morning and Afternoon
     const days = currentSchedule.days;
 
     const templates = JSON.parse(localStorage.getItem(getUserStorageKey('scheduleTemplates')) || '[]');

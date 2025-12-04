@@ -727,7 +727,9 @@ function generatePDF() {
 
             days.forEach((day, index) => {
                 const x = startX + staffColWidth + (index * dayWidth);
+                doc.setFillColor(255, 255, 255); // Set to white for day columns
                 doc.rect(x, currentY, dayWidth, cellHeight, 'F');
+                doc.setTextColor(0, 0, 0); // Ensure text is black
                 doc.text(day.substring(0, 3), x + dayWidth / 2, currentY + 8, { align: 'center' });
             });
 
@@ -814,7 +816,7 @@ function generatePDF() {
     const pageCount = doc.internal.getNumberOfPages();
     for (let i = 1; i <= pageCount; i++) {
         doc.setPage(i);
-        doc.text(`Generated: ${new Date().toLocaleDateString()} | Page ${i} of ${pageCount}`, 148, 200, { align: 'center' });
+        doc.text(`Page ${i} of ${pageCount}`, 148, 200, { align: 'center' });
     }
 
     doc.save(`schedule-${dateRange.replace(/[^a-z0-9]/gi, '_')}.pdf`);

@@ -811,14 +811,6 @@ function generatePDF() {
         }
     });
 
-    doc.setFontSize(8);
-    doc.setTextColor(102, 102, 102);
-    const pageCount = doc.internal.getNumberOfPages();
-    for (let i = 1; i <= pageCount; i++) {
-        doc.setPage(i);
-        doc.text(`Page ${i} of ${pageCount}`, 148, 200, { align: 'center' });
-    }
-
     doc.save(`schedule-${dateRange.replace(/[^a-z0-9]/gi, '_')}.pdf`);
     alert('PDF generated successfully!');
 }

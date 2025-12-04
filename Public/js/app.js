@@ -740,9 +740,8 @@ function generatePDF() {
             days.forEach((day, index) => {
                 const x = startX + staffColWidth + (index * dayWidth);
                 doc.setFillColor(255, 255, 255);
-                doc.rect(x, currentY, dayWidth, cellHeight, 'F');
-                doc.setTextColor(0, 0, 0);
-                doc.text(day.substring(0, 3), x + dayWidth / 2, currentY + 8, { align: 'center' });
+                doc.rect(x, currentY, dayWidth, cellHeight, 'FD');                doc.setTextColor(0, 0, 0);
+                doc.text(day, x + dayWidth / 2, currentY + 8, { align: 'center' });
             });
 
             currentY += cellHeight;
@@ -789,8 +788,7 @@ function generatePDF() {
                         doc.setFillColor(255, 255, 255);
                         doc.rect(x, currentY, dayWidth, cellHeight, 'F');
                         doc.setTextColor(0, 0, 0);
-                        doc.text(day.substring(0, 3), x + dayWidth / 2, currentY + 8, { align: 'center' });
-                    });
+                        doc.text(day, x + dayWidth / 2, currentY + 8, { align: 'center' });                    });
 
                     currentY += cellHeight;
                 }

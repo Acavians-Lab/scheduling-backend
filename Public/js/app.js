@@ -675,12 +675,11 @@ function generatePDF() {
     const template = templates[currentSchedule.activeTemplateId];
     const dateRange = template ? template.dateRange : 'No Date Range';
 
-    doc.setFontSize(16);
-    doc.setFont(undefined, 'bold');
-    doc.text(`Staff Schedule - ${dateRange}`, 148, 15, { align: 'center' });
-
     const startX = 10;
-    let currentY = 25;
+    const pageHeight = 200; // Max height for content
+    const cellHeight = 12;
+    const staffColWidth = 40;
+    const dayWidth = (287 - startX - staffColWidth) / days.length;
 
     shifts.forEach((shift, shiftIndex) => {
         const staffInShift = new Set();
@@ -709,27 +708,40 @@ function generatePDF() {
             });
         });
 
+        // Only create a page for shifts that have staff scheduled
         if (staffInShift.size > 0) {
+            // Add new page for each shift (Morning on page 1, Afternoon on page 2, PM Meeting on page 3)
+            if (shiftIndex > 0) {
+                doc.addPage();
+            }
+
+            let currentY = 15;
+
+            // Title
+            doc.setFontSize(16);
+            doc.setFont(undefined, 'bold');
+            doc.text(`Staff Schedule - ${dateRange}`, 148, currentY, { align: 'center' });
+            currentY += 10;
+
+            // Shift name
             doc.setFontSize(12);
             doc.setFont(undefined, 'bold');
             doc.text(shift, startX, currentY);
             currentY += 7;
 
-            const staffColWidth = 40;
-            const dayWidth = (287 - startX - staffColWidth) / days.length;
-            const cellHeight = 12;
-
+            // Header row (Staff + Days)
             doc.setFontSize(9);
             doc.setFont(undefined, 'bold');
             doc.setFillColor(200, 200, 200);
             doc.rect(startX, currentY, staffColWidth, cellHeight, 'F');
+            doc.setTextColor(0, 0, 0);
             doc.text('Staff', startX + 2, currentY + 8);
 
             days.forEach((day, index) => {
                 const x = startX + staffColWidth + (index * dayWidth);
-                doc.setFillColor(255, 255, 255); // Set to white for day columns
+                doc.setFillColor(255, 255, 255);
                 doc.rect(x, currentY, dayWidth, cellHeight, 'F');
-                doc.setTextColor(0, 0, 0); // Ensure text is black
+                doc.setTextColor(0, 0, 0);
                 doc.text(day.substring(0, 3), x + dayWidth / 2, currentY + 8, { align: 'center' });
             });
 
@@ -737,7 +749,8 @@ function generatePDF() {
 
             const sortedStaff = Array.from(staffInShift).sort((a, b) => a.localeCompare(b));
 
-            sortedStaff.forEach((staffName) => {
+            // Render each staff member
+            sortedStaff.forEach((staffName, staffIndex) => {
                 const schedule = shiftSchedules[staffName] || {};
 
                 const scheduleEntries = days.map(day => schedule[day] || '');
@@ -748,12 +761,49 @@ function generatePDF() {
 
                 const maxCellHeight = Math.max(cellHeight, maxLines * cellHeight);
 
+                // Check if we need a new page (leave room for at least one more row)
+                if (currentY + maxCellHeight > pageHeight) {
+                    doc.addPage();
+                    currentY = 15;
+
+                    // Redraw title and shift name on new page
+                    doc.setFontSize(16);
+                    doc.setFont(undefined, 'bold');
+                    doc.text(`Staff Schedule - ${dateRange}`, 148, currentY, { align: 'center' });
+                    currentY += 10;
+
+                    doc.setFontSize(12);
+                    doc.text(`${shift} (continued)`, startX, currentY);
+                    currentY += 7;
+
+                    // Redraw header row
+                    doc.setFontSize(9);
+                    doc.setFont(undefined, 'bold');
+                    doc.setFillColor(200, 200, 200);
+                    doc.rect(startX, currentY, staffColWidth, cellHeight, 'F');
+                    doc.setTextColor(0, 0, 0);
+                    doc.text('Staff', startX + 2, currentY + 8);
+
+                    days.forEach((day, index) => {
+                        const x = startX + staffColWidth + (index * dayWidth);
+                        doc.setFillColor(255, 255, 255);
+                        doc.rect(x, currentY, dayWidth, cellHeight, 'F');
+                        doc.setTextColor(0, 0, 0);
+                        doc.text(day.substring(0, 3), x + dayWidth / 2, currentY + 8, { align: 'center' });
+                    });
+
+                    currentY += cellHeight;
+                }
+
+                // Draw staff name cell
                 doc.setFillColor(255, 255, 255);
                 doc.rect(startX, currentY, staffColWidth, maxCellHeight, 'FD');
                 doc.setFont(undefined, 'bold');
                 doc.setFontSize(9);
+                doc.setTextColor(0, 0, 0);
                 doc.text(staffName, startX + 2, currentY + maxCellHeight / 2 + 2);
 
+                // Draw schedule cells for each day
                 doc.setFont(undefined, 'normal');
                 days.forEach((day, index) => {
                     const x = startX + staffColWidth + (index * dayWidth);
@@ -801,13 +851,6 @@ function generatePDF() {
 
                 currentY += maxCellHeight;
             });
-
-            currentY += 15;
-        }
-
-        if (currentY > 170 && shiftIndex < shifts.length - 1) {
-            doc.addPage();
-            currentY = 20;
         }
     });
 

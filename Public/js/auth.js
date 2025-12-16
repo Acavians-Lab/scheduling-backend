@@ -19,6 +19,7 @@ async function handleLogin(event) {
     event.preventDefault();
 
     const passcode = document.getElementById('loginPasscode').value.trim();
+    const rememberMe = document.getElementById('rememberMe').checked;
     const errorElement = document.getElementById('loginError');
     const loginButton = event.target.querySelector('button[type="submit"]');
 
@@ -58,7 +59,14 @@ async function handleLogin(event) {
             // Successful login
             localStorage.setItem('authToken', data.token);
             localStorage.setItem('username', username);
-            sessionStorage.setItem('isLoggedIn', 'true');
+
+            // If "Remember Me" is checked, store persistent login flag
+            if (rememberMe) {
+                localStorage.setItem('rememberMe', 'true');
+            } else {
+                // Use sessionStorage if not remembering
+                sessionStorage.setItem('isLoggedIn', 'true');
+            }
 
             showApp();
         } else {
@@ -88,23 +96,34 @@ function showApp() {
 }
 
 function checkLoginStatus() {
-    const isLoggedIn = sessionStorage.getItem('isLoggedIn');
     const token = localStorage.getItem('authToken');
+    const rememberMe = localStorage.getItem('rememberMe');
+    const sessionLoggedIn = sessionStorage.getItem('isLoggedIn');
 
-    if (isLoggedIn === 'true' && token) {
+    // Check if user should be auto-logged in
+    if (token && (rememberMe === 'true' || sessionLoggedIn === 'true')) {
         showApp();
     }
 }
 
 function logout() {
-    // Clear session
+    // Clear all authentication data
     sessionStorage.removeItem('isLoggedIn');
     localStorage.removeItem('authToken');
     localStorage.removeItem('username');
+    localStorage.removeItem('rememberMe');
 
     // Reset UI
     document.getElementById('loginContainer').style.display = 'flex';
     document.getElementById('appContainer').style.display = 'none';
     document.getElementById('loginPasscode').value = '';
     document.getElementById('loginError').textContent = '';
+
+    // Uncheck remember me checkbox
+    if (document.getElementById('rememberMe')) {
+        document.getElementById('rememberMe').checked = false;
+    }
 }
+
+// Check login status when page loads
+window.addEventListener('DOMContentLoaded', checkLoginStatus);

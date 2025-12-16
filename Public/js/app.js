@@ -1,13 +1,14 @@
 // Global state
 let currentSchedule = {
-    staff: [],
+    staff: [], // Now array of objects: {name, status, notes}
     days: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'],
     schedule: {},
     holidays: {},
     budgetHours: 0,
     currentDay: null,
     currentShift: null,
-    activeTemplateId: null
+    activeTemplateId: null,
+    currentEditingStaffIndex: null
 };
 
 // Prevent multiple initializations
@@ -39,7 +40,6 @@ async function init() {
     isInitialized = true;
     console.log('Initializing app...');
 
-    checkLoginStatus();
     await loadFromDatabase();
     checkTemplateStatus();
     renderStaffList();
@@ -65,43 +65,150 @@ function showScheduleView() {
 }
 
 // Staff Management
-function addStaff() {
-    const input = document.getElementById('staffNameInput');
-    const name = input.value.trim();
-
-    if (name && !currentSchedule.staff.includes(name)) {
-        currentSchedule.staff.push(name);
-        input.value = '';
-        renderStaffList();
-        saveToLocalStorage();
-    }
+function openAddStaffModal() {
+    document.getElementById('newStaffName').value = '';
+    document.getElementById('newStaffStatus').value = 'active';
+    document.getElementById('newStaffNotes').value = '';
+    openModal('addStaffModal');
 }
 
-function handleStaffEnter(event) {
-    if (event.key === 'Enter') {
-        addStaff();
-    }
-}
+function saveNewStaff() {
+    const name = document.getElementById('newStaffName').value.trim();
+    const status = document.getElementById('newStaffStatus').value;
+    const notes = document.getElementById('newStaffNotes').value.trim();
 
-function removeStaff(name) {
-    if (!confirm(`Remove ${name} from staff list? This will remove them from all scheduled shifts.`)) {
+    if (!name) {
+        alert('Please enter a staff name');
         return;
     }
 
-    // Remove from staff list
-    currentSchedule.staff = currentSchedule.staff.filter(s => s !== name);
+    // Check if staff already exists
+    const existingStaff = currentSchedule.staff.find(s => s.name.toLowerCase() === name.toLowerCase());
+    if (existingStaff) {
+        alert('A staff member with this name already exists');
+        return;
+    }
 
-    // Remove from all shifts, but keep the shift entries for other staff
+    try {
+        currentSchedule.staff.push({
+            name: name,
+            status: status,
+            notes: notes
+        });
+
+        renderStaffList();
+        saveToDatabase();
+        closeModal('addStaffModal');
+    } catch (error) {
+        console.error('Error adding staff:', error);
+        alert('Error adding staff member: ' + error.message);
+    }
+}
+
+function openEditStaffModal() {
+    renderStaffEditList();
+    openModal('editStaffListModal');
+}
+
+function renderStaffEditList() {
+    const container = document.getElementById('staffEditList');
+    const emptyState = document.getElementById('emptyStaffState');
+
+    if (currentSchedule.staff.length === 0) {
+        container.innerHTML = '';
+        emptyState.style.display = 'block';
+        return;
+    }
+
+    emptyState.style.display = 'none';
+    container.innerHTML = currentSchedule.staff.map((staffMember, index) => `
+        <div class="staff-edit-item" onclick="openIndividualStaffEdit(${index})">
+            <div class="staff-edit-info">
+                <div class="staff-edit-name">${escapeHtml(staffMember.name)}</div>
+                <div class="staff-edit-status ${staffMember.status}">${staffMember.status === 'active' ? 'Active' : 'Inactive'}</div>
+            </div>
+            <div class="staff-edit-arrow">›</div>
+        </div>
+    `).join('');
+}
+
+function openIndividualStaffEdit(index) {
+    currentSchedule.currentEditingStaffIndex = index;
+    const staffMember = currentSchedule.staff[index];
+
+    document.getElementById('editStaffNameField').value = staffMember.name;
+    document.getElementById('editStaffStatus').value = staffMember.status;
+    document.getElementById('editStaffNotes').value = staffMember.notes || '';
+
+    closeModal('editStaffListModal');
+    openModal('editIndividualStaffModal');
+}
+
+function saveStaffEdits() {
+    const index = currentSchedule.currentEditingStaffIndex;
+    const name = document.getElementById('editStaffNameField').value.trim();
+    const status = document.getElementById('editStaffStatus').value;
+    const notes = document.getElementById('editStaffNotes').value.trim();
+
+    if (!name) {
+        alert('Please enter a staff name');
+        return;
+    }
+
+    const oldName = currentSchedule.staff[index].name;
+
+    // Check if new name conflicts with another staff member
+    if (name.toLowerCase() !== oldName.toLowerCase()) {
+        const existingStaff = currentSchedule.staff.find((s, i) =>
+            i !== index && s.name.toLowerCase() === name.toLowerCase()
+        );
+        if (existingStaff) {
+            alert('A staff member with this name already exists');
+            return;
+        }
+    }
+
+    // Update staff member
+    currentSchedule.staff[index] = {
+        name: name,
+        status: status,
+        notes: notes
+    };
+
+    // If name changed, update all schedule entries
+    if (name !== oldName) {
+        updateStaffNameInSchedule(oldName, name);
+    }
+
+    renderStaffList();
+    renderSchedule();
+    updateStats();
+    saveToDatabase();
+    closeModal('editIndividualStaffModal');
+}
+
+function deleteStaffMember() {
+    const index = currentSchedule.currentEditingStaffIndex;
+    const staffMember = currentSchedule.staff[index];
+
+    if (!confirm(`Delete ${staffMember.name}? This will remove them from all scheduled shifts.`)) {
+        return;
+    }
+
+    const staffName = staffMember.name;
+
+    // Remove from staff list
+    currentSchedule.staff.splice(index, 1);
+
+    // Remove from all shifts
     currentSchedule.days.forEach(day => {
         if (currentSchedule.schedule[day]) {
             ['Morning', 'Afternoon', 'PM Meeting'].forEach(shift => {
                 if (currentSchedule.schedule[day][shift]) {
                     currentSchedule.schedule[day][shift].forEach(entry => {
-                        // Remove this staff member from the entry
-                        entry.staff = entry.staff.filter(staffName => staffName !== name);
+                        entry.staff = entry.staff.filter(name => name !== staffName);
                     });
 
-                    // Remove entries that have no staff left
                     currentSchedule.schedule[day][shift] = currentSchedule.schedule[day][shift].filter(
                         entry => entry.staff.length > 0
                     );
@@ -113,22 +220,107 @@ function removeStaff(name) {
     renderStaffList();
     renderSchedule();
     updateStats();
-    saveToLocalStorage();
+    saveToDatabase();
+    closeModal('editIndividualStaffModal');
+}
+
+function updateStaffNameInSchedule(oldName, newName) {
+    currentSchedule.days.forEach(day => {
+        if (currentSchedule.schedule[day]) {
+            ['Morning', 'Afternoon', 'PM Meeting'].forEach(shift => {
+                if (currentSchedule.schedule[day][shift]) {
+                    currentSchedule.schedule[day][shift].forEach(entry => {
+                        entry.staff = entry.staff.map(name => name === oldName ? newName : name);
+                    });
+                }
+            });
+        }
+    });
+}
+
+function addStaff() {
+    // Legacy function - redirects to new modal
+    openAddStaffModal();
+}
+
+function handleStaffEnter(event) {
+    // Legacy function - no longer used
+    if (event.key === 'Enter') {
+        openAddStaffModal();
+    }
+}
+
+function removeStaff(name) {
+    // Legacy function - now handled through edit modal
+    const index = currentSchedule.staff.findIndex(s => s.name === name);
+    if (index !== -1) {
+        currentSchedule.currentEditingStaffIndex = index;
+        deleteStaffMember();
+    }
 }
 
 function renderStaffList() {
     const container = document.getElementById('staffList');
-    if (currentSchedule.staff.length === 0) {
-        container.innerHTML = '<div style="color: #999; padding: 10px;">No staff added yet. Add staff members to get started.</div>';
+
+    // Filter to show only active staff
+    const activeStaff = currentSchedule.staff.filter(s => s.status === 'active');
+
+    if (activeStaff.length === 0) {
+        container.innerHTML = '<div style="color: #999; padding: 10px;">No active staff members. Add staff to get started.</div>';
         return;
     }
 
-    container.innerHTML = currentSchedule.staff.map(name => `
-        <div class="staff-chip">
-            <span>${escapeHtml(name)}</span>
-            <span class="remove" onclick="removeStaff('${escapeHtml(name)}')">&times;</span>
+    container.innerHTML = activeStaff.map(staffMember => `
+        <div class="staff-chip" onclick="openStaffNotesModal('${escapeHtml(staffMember.name)}')">
+            <span>${escapeHtml(staffMember.name)}</span>
+            ${staffMember.notes ? '<span style="font-size: 12px;">📝</span>' : ''}
         </div>
     `).join('');
+}
+
+// Staff Notes Modal Functions
+let currentNotesStaffName = null;
+
+function openStaffNotesModal(staffName) {
+    const staffMember = currentSchedule.staff.find(s => s.name === staffName);
+    if (!staffMember) return;
+
+    currentNotesStaffName = staffName;
+    document.getElementById('staffNotesTitle').textContent = `Notes for ${staffName}`;
+    document.getElementById('staffNotesTextarea').value = staffMember.notes || '';
+    openModal('staffNotesModal');
+}
+
+function saveStaffNotes() {
+    if (!currentNotesStaffName) return;
+
+    const notes = document.getElementById('staffNotesTextarea').value.trim();
+    const staffMember = currentSchedule.staff.find(s => s.name === currentNotesStaffName);
+
+    if (staffMember) {
+        staffMember.notes = notes;
+        renderStaffList();
+        saveToDatabase();
+        closeModal('staffNotesModal');
+        alert('Notes saved successfully!');
+    }
+}
+
+function deleteStaffNotes() {
+    if (!currentNotesStaffName) return;
+
+    if (!confirm('Delete all notes for this staff member?')) return;
+
+    const staffMember = currentSchedule.staff.find(s => s.name === currentNotesStaffName);
+
+    if (staffMember) {
+        staffMember.notes = '';
+        document.getElementById('staffNotesTextarea').value = '';
+        renderStaffList();
+        saveToDatabase();
+        closeModal('staffNotesModal');
+        alert('Notes deleted successfully!');
+    }
 }
 
 // Schedule Rendering
@@ -201,8 +393,10 @@ function renderShifts(day, daySchedule) {
 
 // Shift Management
 function openShiftModal(day, shift) {
-    if (currentSchedule.staff.length === 0) {
-        alert('Please add staff members first!');
+    const activeStaff = currentSchedule.staff.filter(s => s.status === 'active');
+
+    if (activeStaff.length === 0) {
+        alert('Please add active staff members first!');
         return;
     }
 
@@ -220,53 +414,81 @@ function renderDayCheckboxes(selectedDay) {
     container.innerHTML = '';
 
     currentSchedule.days.forEach(day => {
+        const checkbox = document.createElement('div');
+        checkbox.className = 'checkbox-item';
+
+        const input = document.createElement('input');
+        input.type = 'checkbox';
+        input.id = `day-${day}`;
+        input.value = day;
+        input.checked = day === selectedDay;
+
         const label = document.createElement('label');
-        label.className = 'checkbox-item';
-        if (day === selectedDay) {
-            label.classList.add('selected');
-        }
+        label.htmlFor = `day-${day}`;
+        label.textContent = day;
 
-        const checkbox = document.createElement('input');
-        checkbox.type = 'checkbox';
-        checkbox.value = day;
-        checkbox.checked = (day === selectedDay);
-
-        checkbox.addEventListener('change', function() {
-            if (this.checked) {
-                label.classList.add('selected');
-            } else {
-                label.classList.remove('selected');
-            }
-        });
-
-        const span = document.createElement('span');
-        span.textContent = day;
-
-        label.appendChild(checkbox);
-        label.appendChild(span);
-        container.appendChild(label);
+        checkbox.appendChild(input);
+        checkbox.appendChild(label);
+        container.appendChild(checkbox);
     });
 }
 
 function renderStaffCheckboxes() {
     const container = document.getElementById('staffCheckboxes');
-    container.innerHTML = currentSchedule.staff.map(name => `
-        <label class="checkbox-item">
-            <input type="checkbox" value="${escapeHtml(name)}">
-            <span>${escapeHtml(name)}</span>
-        </label>
-    `).join('');
+    container.innerHTML = '';
+
+    // Filter to show only active staff
+    const activeStaff = currentSchedule.staff.filter(s => s.status === 'active');
+
+    activeStaff.forEach(staffMember => {
+        const checkbox = document.createElement('div');
+        checkbox.className = 'checkbox-item';
+
+        const input = document.createElement('input');
+        input.type = 'checkbox';
+        input.id = `staff-${staffMember.name}`;
+        input.value = staffMember.name;
+
+        const label = document.createElement('label');
+        label.htmlFor = `staff-${staffMember.name}`;
+        label.textContent = staffMember.name;
+
+        // Add notes indicator if notes exist
+        if (staffMember.notes) {
+            label.title = `Notes: ${staffMember.notes}`;
+            label.style.cursor = 'help';
+            const noteIcon = document.createElement('span');
+            noteIcon.textContent = ' 📝';
+            noteIcon.style.fontSize = '12px';
+            label.appendChild(noteIcon);
+        }
+
+        checkbox.appendChild(input);
+        checkbox.appendChild(label);
+        container.appendChild(checkbox);
+    });
 }
 
 function saveShift() {
-    const selectedDays = Array.from(document.querySelectorAll('#dayCheckboxes input:checked')).map(cb => cb.value);
-    const selectedStaff = Array.from(document.querySelectorAll('#staffCheckboxes input:checked')).map(cb => cb.value);
+    const shiftType = document.getElementById('shiftType').value;
     const startTime = document.getElementById('startTime').value;
     const endTime = document.getElementById('endTime').value;
-    const shiftType = document.getElementById('shiftType').value;
 
-    if (selectedDays.length === 0 || selectedStaff.length === 0 || !startTime || !endTime) {
-        alert('Please fill all fields');
+    if (!startTime || !endTime) {
+        alert('Please enter start and end times');
+        return;
+    }
+
+    const selectedDays = Array.from(document.querySelectorAll('#dayCheckboxes input:checked')).map(cb => cb.value);
+    const selectedStaff = Array.from(document.querySelectorAll('#staffCheckboxes input:checked')).map(cb => cb.value);
+
+    if (selectedDays.length === 0) {
+        alert('Please select at least one day');
+        return;
+    }
+
+    if (selectedStaff.length === 0) {
+        alert('Please select at least one staff member');
         return;
     }
 
@@ -278,20 +500,37 @@ function saveShift() {
             currentSchedule.schedule[day][shiftType] = [];
         }
 
-        currentSchedule.schedule[day][shiftType].push({
-            startTime,
-            endTime,
-            staff: selectedStaff
-        });
+        const existingEntry = currentSchedule.schedule[day][shiftType].find(
+            entry => entry.startTime === startTime && entry.endTime === endTime
+        );
+
+        if (existingEntry) {
+            selectedStaff.forEach(staff => {
+                if (!existingEntry.staff.includes(staff)) {
+                    existingEntry.staff.push(staff);
+                }
+            });
+        } else {
+            currentSchedule.schedule[day][shiftType].push({
+                startTime,
+                endTime,
+                staff: [...selectedStaff]
+            });
+        }
     });
 
-    closeModal('shiftModal');
     renderSchedule();
     updateStats();
-    saveToLocalStorage();
+    saveToDatabase();
+    closeModal('shiftModal');
+
+    document.getElementById('startTime').value = '';
+    document.getElementById('endTime').value = '';
 }
 
 function removeStaffFromShift(day, shift, entryIndex, staffName) {
+    if (!confirm(`Remove ${staffName} from this shift?`)) return;
+
     const entry = currentSchedule.schedule[day][shift][entryIndex];
     entry.staff = entry.staff.filter(name => name !== staffName);
 
@@ -301,90 +540,101 @@ function removeStaffFromShift(day, shift, entryIndex, staffName) {
 
     renderSchedule();
     updateStats();
-    saveToLocalStorage();
+    saveToDatabase();
 }
-
-// Global variable to store edit context
-let editContext = {
-    day: null,
-    shift: null,
-    entryIndex: null,
-    staffName: null
-};
 
 function openEditShiftModal(day, shift, entryIndex, staffName) {
     const entry = currentSchedule.schedule[day][shift][entryIndex];
+    const staffMember = currentSchedule.staff.find(s => s.name === staffName);
 
-    // Store context
-    editContext = { day, shift, entryIndex, staffName };
-
-    // Populate modal
     document.getElementById('editStaffName').value = staffName;
     document.getElementById('editDay').value = day;
     document.getElementById('editShiftType').value = shift;
     document.getElementById('editStartTime').value = entry.startTime;
     document.getElementById('editEndTime').value = entry.endTime;
 
+    // Display staff notes if they exist
+    const notesDisplay = document.getElementById('staffNotesDisplay');
+    const notesContent = document.getElementById('editStaffNotesDisplay');
+
+    if (staffMember && staffMember.notes) {
+        notesContent.textContent = staffMember.notes;
+        notesDisplay.style.display = 'block';
+    } else {
+        notesDisplay.style.display = 'none';
+    }
+
+    currentSchedule.currentDay = day;
+    currentSchedule.currentShift = shift;
+    currentSchedule.currentEntryIndex = entryIndex;
+    currentSchedule.currentStaffName = staffName;
+
     openModal('editShiftModal');
 }
 
 function saveEditedShift() {
-    const { day, shift, entryIndex, staffName } = editContext;
-    const newShift = document.getElementById('editShiftType').value;
+    const day = currentSchedule.currentDay;
+    const oldShift = currentSchedule.currentShift;
+    const entryIndex = currentSchedule.currentEntryIndex;
+    const staffName = currentSchedule.currentStaffName;
+
+    const newShiftType = document.getElementById('editShiftType').value;
     const newStartTime = document.getElementById('editStartTime').value;
     const newEndTime = document.getElementById('editEndTime').value;
 
     if (!newStartTime || !newEndTime) {
-        alert('Please fill in both start and end times');
+        alert('Please enter start and end times');
         return;
     }
 
-    const entry = currentSchedule.schedule[day][shift][entryIndex];
-    const otherStaff = entry.staff.filter(name => name !== staffName);
+    const oldEntry = currentSchedule.schedule[day][oldShift][entryIndex];
+    oldEntry.staff = oldEntry.staff.filter(name => name !== staffName);
 
-    // Remove staff from current entry
-    if (otherStaff.length > 0) {
-        entry.staff = otherStaff;
-    } else {
-        // Remove the entire entry if this was the only staff member
-        currentSchedule.schedule[day][shift].splice(entryIndex, 1);
+    if (oldEntry.staff.length === 0) {
+        currentSchedule.schedule[day][oldShift].splice(entryIndex, 1);
     }
 
-    // Add staff to new shift (could be same shift with different times)
-    if (!currentSchedule.schedule[day][newShift]) {
-        currentSchedule.schedule[day][newShift] = [];
+    if (!currentSchedule.schedule[day][newShiftType]) {
+        currentSchedule.schedule[day][newShiftType] = [];
     }
 
-    // Check if there's an existing entry with the same times
-    const existingEntry = currentSchedule.schedule[day][newShift].find(
-        e => e.startTime === newStartTime && e.endTime === newEndTime
+    const existingEntry = currentSchedule.schedule[day][newShiftType].find(
+        entry => entry.startTime === newStartTime && entry.endTime === newEndTime
     );
 
     if (existingEntry) {
-        // Add to existing entry if times match
         if (!existingEntry.staff.includes(staffName)) {
             existingEntry.staff.push(staffName);
         }
     } else {
-        // Create new entry
-        currentSchedule.schedule[day][newShift].push({
+        currentSchedule.schedule[day][newShiftType].push({
             startTime: newStartTime,
             endTime: newEndTime,
             staff: [staffName]
         });
     }
 
-    closeModal('editShiftModal');
     renderSchedule();
     updateStats();
-    saveToLocalStorage();
+    saveToDatabase();
+    closeModal('editShiftModal');
 }
 
-// Statistics
-function updateStats() {
-    const totalHours = calculateTotalHours();
-    document.getElementById('totalHours').textContent = totalHours.toFixed(1);
-    document.getElementById('budgetHours').textContent = currentSchedule.budgetHours.toFixed(1);
+function calculateDayHours(day) {
+    if (currentSchedule.holidays[day]) return 0;
+
+    const daySchedule = currentSchedule.schedule[day] || {};
+    let totalHours = 0;
+
+    ['Morning', 'Afternoon', 'PM Meeting'].forEach(shift => {
+        const entries = daySchedule[shift] || [];
+        entries.forEach(entry => {
+            const hours = calculateHours(entry.startTime, entry.endTime);
+            totalHours += hours * entry.staff.length;
+        });
+    });
+
+    return totalHours;
 }
 
 function calculateTotalHours() {
@@ -395,26 +645,11 @@ function calculateTotalHours() {
     return total;
 }
 
-function calculateDayHours(day) {
-    if (currentSchedule.holidays[day]) return 0;
+function calculateHours(startTime, endTime) {
+    if (!startTime || !endTime) return 0;
 
-    const daySchedule = currentSchedule.schedule[day] || {};
-    let total = 0;
-
-    ['Morning', 'Afternoon', 'PM Meeting'].forEach(shift => {
-        const entries = daySchedule[shift] || [];
-        entries.forEach(entry => {
-            const hours = calculateShiftHours(entry.startTime, entry.endTime);
-            total += hours * entry.staff.length;
-        });
-    });
-
-    return total;
-}
-
-function calculateShiftHours(start, end) {
-    const [startHour, startMin] = start.split(':').map(Number);
-    const [endHour, endMin] = end.split(':').map(Number);
+    const [startHour, startMin] = startTime.split(':').map(Number);
+    const [endHour, endMin] = endTime.split(':').map(Number);
 
     const startMinutes = startHour * 60 + startMin;
     const endMinutes = endHour * 60 + endMin;
@@ -422,63 +657,57 @@ function calculateShiftHours(start, end) {
     return (endMinutes - startMinutes) / 60;
 }
 
-// Holidays
-function openHolidaysModal() {
-    const container = document.getElementById('holidayDays');
-    container.innerHTML = currentSchedule.days.map(day => {
-        const isHoliday = currentSchedule.holidays[day];
-        return `
-            <label class="checkbox-item ${isHoliday ? 'selected' : ''}">
-                <input type="checkbox" value="${day}" ${isHoliday ? 'checked' : ''}>
-                <span>${day}</span>
-            </label>
-        `;
-    }).join('');
-
-    const existingHolidayName = Object.values(currentSchedule.holidays).find(h => h && h !== true);
-    document.getElementById('holidayName').value = existingHolidayName || '';
-
-    openModal('holidaysModal');
-}
-
-function saveHoliday() {
-    const selectedDays = Array.from(document.querySelectorAll('#holidayDays input:checked')).map(cb => cb.value);
-    const holidayName = document.getElementById('holidayName').value.trim();
-
-    currentSchedule.holidays = {};
-
-    selectedDays.forEach(day => {
-        currentSchedule.holidays[day] = holidayName || true;
-    });
-
-    closeModal('holidaysModal');
-    renderSchedule();
-    updateStats();
-    saveToLocalStorage();
-}
-
-function clearAllHolidays() {
-    if (confirm('Clear all holidays?')) {
-        currentSchedule.holidays = {};
-        closeModal('holidaysModal');
-        renderSchedule();
-        updateStats();
-        saveToLocalStorage();
-    }
+function updateStats() {
+    const totalHours = calculateTotalHours();
+    document.getElementById('totalHours').textContent = totalHours.toFixed(1);
+    document.getElementById('budgetHours').textContent = currentSchedule.budgetHours.toFixed(1);
 }
 
 // Template Management
-function openTemplateModal() {
-    renderTemplateList();
+async function openTemplateModal() {
+    await loadTemplatesFromDatabase();
     openModal('templateModal');
 }
 
-function renderTemplateList() {
-    const templates = JSON.parse(localStorage.getItem(getUserStorageKey('scheduleTemplates')) || '[]');
+async function loadTemplatesFromDatabase() {
+    const token = localStorage.getItem('authToken');
+    if (!token) {
+        console.error('No auth token for loading templates');
+        return;
+    }
+
+    try {
+        console.log('Loading templates from:', `${API_URL}/api/templates`);
+
+        const response = await fetch(`${API_URL}/api/templates`, {
+            method: 'GET',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+            }
+        });
+
+        console.log('Template response status:', response.status);
+
+        if (response.ok) {
+            const data = await response.json();
+            console.log('Templates loaded:', data);
+            renderTemplateList(data.templates || []);
+        } else {
+            console.error('Failed to load templates:', response.status, response.statusText);
+            const errorData = await response.json().catch(() => ({}));
+            console.error('Error details:', errorData);
+        }
+    } catch (error) {
+        console.error('Error loading templates:', error);
+    }
+}
+
+function renderTemplateList(templates) {
     const container = document.getElementById('templateList');
     const emptyState = document.getElementById('emptyTemplateState');
 
-    if (templates.length === 0) {
+    if (!templates || templates.length === 0) {
         container.innerHTML = '';
         emptyState.style.display = 'block';
         return;
@@ -487,369 +716,387 @@ function renderTemplateList() {
     emptyState.style.display = 'none';
     container.innerHTML = templates.map((template, index) => `
         <div class="template-item ${currentSchedule.activeTemplateId === index ? 'active' : ''}">
-            <div class="template-content" onclick="loadTemplate(${index})">
-                <div class="template-title">${escapeHtml(template.name)}</div>
-                <div class="template-info">${template.dateRange} | ${template.budgetHours}h budget</div>
+            <div class="template-info">
+                <div class="template-name">${escapeHtml(template.name)}</div>
+                <div class="template-meta">${template.budgetHours}h budget</div>
             </div>
             <div class="template-actions">
-                <button class="template-btn" onclick="event.stopPropagation(); renameTemplate(${index})" title="Rename">✏️</button>
-                <button class="template-btn" onclick="event.stopPropagation(); deleteTemplate(${index})" title="Delete">🗑️</button>
+                <button class="btn btn-primary btn-sm" onclick="loadTemplate(${index})">Load</button>
+                <button class="btn btn-danger btn-sm" onclick="deleteTemplate(${index})">Delete</button>
             </div>
         </div>
     `).join('');
 }
 
-function loadTemplate(index) {
-    const templates = JSON.parse(localStorage.getItem(getUserStorageKey('scheduleTemplates')) || '[]');
-    if (!templates[index]) return;
+async function loadTemplate(index) {
+    const token = localStorage.getItem('authToken');
+    if (!token) return;
 
-    const template = templates[index];
+    try {
+        const response = await fetch(`${API_URL}/api/templates/${index}`, {
+            method: 'GET',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+            }
+        });
 
-    currentSchedule.activeTemplateId = index;
-    currentSchedule.staff = [...template.staff];
-    currentSchedule.schedule = JSON.parse(JSON.stringify(template.schedule));
-    currentSchedule.holidays = {...template.holidays};
-    currentSchedule.budgetHours = template.budgetHours;
+        if (response.ok) {
+            const data = await response.json();
+            const template = data.template;
 
-    renderStaffList();
-    renderSchedule();
-    updateStats();
-    saveToLocalStorage();
-    showScheduleView();
-    closeModal('templateModal');
+            currentSchedule.activeTemplateId = index;
+            currentSchedule.staff = [...(template.staff || [])];
+            currentSchedule.schedule = JSON.parse(JSON.stringify(template.schedule || {}));
+            currentSchedule.holidays = {...(template.holidays || {})};
+            currentSchedule.budgetHours = template.budgetHours || 0;
+
+            await saveToDatabase();
+            renderStaffList();
+            renderSchedule();
+            updateStats();
+            checkTemplateStatus();
+            closeModal('templateModal');
+        }
+    } catch (error) {
+        console.error('Error loading template:', error);
+        alert('Failed to load template');
+    }
 }
 
-function deleteTemplate(index) {
-    const templates = JSON.parse(localStorage.getItem(getUserStorageKey('scheduleTemplates')) || '[]');
-    if (!templates[index]) return;
+async function deleteTemplate(index) {
+    if (!confirm('Delete this template? This cannot be undone.')) return;
 
-    if (!confirm(`Delete template "${templates[index].name}"?`)) return;
+    const token = localStorage.getItem('authToken');
+    if (!token) return;
 
-    templates.splice(index, 1);
-    localStorage.setItem(getUserStorageKey('scheduleTemplates'), JSON.stringify(templates));
+    try {
+        const response = await fetch(`${API_URL}/api/templates/${index}`, {
+            method: 'DELETE',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+            }
+        });
 
-    if (currentSchedule.activeTemplateId === index) {
-        currentSchedule.activeTemplateId = null;
-    } else if (currentSchedule.activeTemplateId > index) {
-        currentSchedule.activeTemplateId--;
+        if (response.ok) {
+            await loadTemplatesFromDatabase();
+            if (currentSchedule.activeTemplateId === index) {
+                currentSchedule.activeTemplateId = null;
+                currentSchedule.budgetHours = 0;
+                checkTemplateStatus();
+            }
+        }
+    } catch (error) {
+        console.error('Error deleting template:', error);
+        alert('Failed to delete template');
+    }
+}
+
+async function saveCurrentSchedule() {
+    const templateName = prompt('Enter a name for this template:');
+    if (!templateName) return;
+
+    const token = localStorage.getItem('authToken');
+    if (!token) {
+        console.error('No auth token for saving template');
+        return;
     }
 
-    saveToLocalStorage();
-    renderTemplateList();
+    try {
+        console.log('Saving template:', templateName);
+        console.log('Template data:', {
+            name: templateName,
+            staff: currentSchedule.staff,
+            schedule: currentSchedule.schedule,
+            holidays: currentSchedule.holidays,
+            budgetHours: currentSchedule.budgetHours
+        });
+
+        const response = await fetch(`${API_URL}/api/templates`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                name: templateName,
+                staff: currentSchedule.staff,
+                schedule: currentSchedule.schedule,
+                holidays: currentSchedule.holidays,
+                budgetHours: currentSchedule.budgetHours
+            })
+        });
+
+        console.log('Save template response status:', response.status);
+
+        if (response.ok) {
+            const data = await response.json();
+            console.log('Template saved successfully:', data);
+            currentSchedule.activeTemplateId = data.templateId;
+            await saveToDatabase();
+            alert('Template saved successfully!');
+        } else {
+            const errorData = await response.json().catch(() => ({}));
+            console.error('Failed to save template:', response.status, errorData);
+            alert('Failed to save template: ' + (errorData.msg || 'Unknown error'));
+        }
+    } catch (error) {
+        console.error('Error saving template:', error);
+        alert('Failed to save template: ' + error.message);
+    }
 }
 
-function renameTemplate(index) {
-    const templates = JSON.parse(localStorage.getItem(getUserStorageKey('scheduleTemplates')) || '[]');
-    if (!templates[index]) return;
-
-    const newName = prompt('Enter new template name:', templates[index].name);
-    if (!newName || newName.trim() === '') return;
-
-    templates[index].name = newName.trim();
-    localStorage.setItem(getUserStorageKey('scheduleTemplates'), JSON.stringify(templates));
-
-    saveToLocalStorage();
-    renderTemplateList();
+// Holidays
+function openHolidaysModal() {
+    renderHolidayCheckboxes();
+    openModal('holidaysModal');
 }
 
+function renderHolidayCheckboxes() {
+    const container = document.getElementById('holidayDays');
+    container.innerHTML = '';
+
+    currentSchedule.days.forEach(day => {
+        const checkbox = document.createElement('div');
+        checkbox.className = 'checkbox-item';
+
+        const input = document.createElement('input');
+        input.type = 'checkbox';
+        input.id = `holiday-${day}`;
+        input.value = day;
+        input.checked = !!currentSchedule.holidays[day];
+
+        const label = document.createElement('label');
+        label.htmlFor = `holiday-${day}`;
+        label.textContent = day;
+
+        checkbox.appendChild(input);
+        checkbox.appendChild(label);
+        container.appendChild(checkbox);
+    });
+}
+
+function saveHoliday() {
+    const holidayName = document.getElementById('holidayName').value.trim();
+    if (!holidayName) {
+        alert('Please enter a holiday name');
+        return;
+    }
+
+    const selectedDays = Array.from(document.querySelectorAll('#holidayDays input:checked')).map(cb => cb.value);
+
+    if (selectedDays.length === 0) {
+        alert('Please select at least one day');
+        return;
+    }
+
+    selectedDays.forEach(day => {
+        currentSchedule.holidays[day] = holidayName;
+    });
+
+    renderSchedule();
+    updateStats();
+    saveToDatabase();
+    closeModal('holidaysModal');
+    document.getElementById('holidayName').value = '';
+}
+
+function clearAllHolidays() {
+    if (!confirm('Clear all holidays?')) return;
+
+    currentSchedule.holidays = {};
+    renderSchedule();
+    updateStats();
+    saveToDatabase();
+    closeModal('holidaysModal');
+}
+
+// Create Template
 function openCreateTemplateModal() {
+    const today = new Date();
+    const monday = new Date(today);
+    monday.setDate(today.getDate() - today.getDay() + 1);
+
+    const friday = new Date(monday);
+    friday.setDate(monday.getDate() + 4);
+
+    document.getElementById('templateStartDate').value = monday.toISOString().split('T')[0];
+    document.getElementById('templateEndDate').value = friday.toISOString().split('T')[0];
+    document.getElementById('templateBudget').value = '';
+
     openModal('createTemplateModal');
 }
 
-function confirmCreateTemplate() {
+async function confirmCreateTemplate() {
     const startDate = document.getElementById('templateStartDate').value;
     const endDate = document.getElementById('templateEndDate').value;
-    const budgetHours = parseFloat(document.getElementById('templateBudget').value) || 0;
+    const budget = parseFloat(document.getElementById('templateBudget').value);
 
-    if (!startDate || !endDate || budgetHours <= 0) {
-        alert('Please fill all fields with valid values');
+    if (!startDate || !endDate) {
+        alert('Please select start and end dates');
         return;
     }
 
-    const start = new Date(startDate + 'T00:00:00');
-    const end = new Date(endDate + 'T00:00:00');
-
-    if (start >= end) {
-        alert('End date must be after start date');
+    if (!budget || budget <= 0) {
+        alert('Please enter a valid budget (greater than 0)');
         return;
     }
 
-    // Format dates consistently (MM/DD/YYYY)
-    const formatDate = (date) => {
-        const month = (date.getMonth() + 1).toString().padStart(2, '0');
-        const day = date.getDate().toString().padStart(2, '0');
-        const year = date.getFullYear();
-        return `${month}/${day}/${year}`;
-    };
-
-    const dateRange = `${formatDate(start)} - ${formatDate(end)}`;
-    const templateName = dateRange;
-
-    currentSchedule.budgetHours = budgetHours;
-    currentSchedule.staff = [];
     currentSchedule.schedule = {};
     currentSchedule.holidays = {};
+    currentSchedule.budgetHours = budget;
+    currentSchedule.staff = [];
+    currentSchedule.activeTemplateId = null;
 
-    const templates = JSON.parse(localStorage.getItem(getUserStorageKey('scheduleTemplates')) || '[]');
-    const newTemplateIndex = templates.length;
-
-    templates.push({
-        name: templateName,
-        dateRange: dateRange,
-        budgetHours: budgetHours,
-        staff: [],
-        schedule: {},
-        holidays: {},
-        createdAt: new Date().toISOString()
-    });
-
-    localStorage.setItem(getUserStorageKey('scheduleTemplates'), JSON.stringify(templates));
-
-    currentSchedule.activeTemplateId = newTemplateIndex;
-
-    document.getElementById('templateStartDate').value = '';
-    document.getElementById('templateEndDate').value = '';
-    document.getElementById('templateBudget').value = '';
-
-    closeModal('createTemplateModal');
-    showScheduleView();
-    renderStaffList();
+    await saveToDatabase();
     renderSchedule();
     updateStats();
-    saveToLocalStorage();
-}
-
-function saveCurrentSchedule() {
-    if (currentSchedule.activeTemplateId === null) {
-        alert('No active template to save to. Please create a template first.');
-        return;
-    }
-
-    const templates = JSON.parse(localStorage.getItem(getUserStorageKey('scheduleTemplates')) || '[]');
-    const template = templates[currentSchedule.activeTemplateId];
-
-    if (!template) {
-        alert('Template not found.');
-        return;
-    }
-
-    template.staff = [...currentSchedule.staff];
-    template.schedule = JSON.parse(JSON.stringify(currentSchedule.schedule));
-    template.holidays = {...currentSchedule.holidays};
-    template.budgetHours = currentSchedule.budgetHours;
-    template.lastModified = new Date().toISOString();
-
-    localStorage.setItem(getUserStorageKey('scheduleTemplates'), JSON.stringify(templates));
-
-    saveToDatabase();
-
-    alert(`Template "${template.name}" saved successfully!`);
-}
-
-function saveCurrentTemplateToStorage() {
-    if (currentSchedule.activeTemplateId === null) return;
-
-    const templates = JSON.parse(localStorage.getItem(getUserStorageKey('scheduleTemplates')) || '[]');
-    const template = templates[currentSchedule.activeTemplateId];
-
-    if (!template) return;
-
-    template.staff = [...currentSchedule.staff];
-    template.schedule = JSON.parse(JSON.stringify(currentSchedule.schedule));
-    template.holidays = {...currentSchedule.holidays};
-    template.budgetHours = currentSchedule.budgetHours;
-    template.lastModified = new Date().toISOString();
-
-    localStorage.setItem(getUserStorageKey('scheduleTemplates'), JSON.stringify(templates));
+    showScheduleView();
+    closeModal('createTemplateModal');
 }
 
 // PDF Generation
 function generatePDF() {
     const { jsPDF } = window.jspdf;
-    const doc = new jsPDF('landscape');
+    const doc = new jsPDF({
+        orientation: 'landscape',
+        unit: 'mm',
+        format: 'a4'
+    });
 
-    const shifts = ['Morning', 'Afternoon']; // Only generate Morning and Afternoon
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
+    const margin = 10;
+
+    doc.setFontSize(16);
+    doc.setFont(undefined, 'bold');
+    doc.text('Weekly Schedule', margin, margin + 7);
+
+    const startDate = document.getElementById('templateStartDate')?.value || 'N/A';
+    const endDate = document.getElementById('templateEndDate')?.value || 'N/A';
+    const dateRange = `${startDate} to ${endDate}`;
+
+    doc.setFontSize(10);
+    doc.setFont(undefined, 'normal');
+    doc.text(dateRange, margin, margin + 13);
+
+    const totalHours = calculateTotalHours();
+    const budgetHours = currentSchedule.budgetHours;
+    doc.text(`Total Hours: ${totalHours.toFixed(1)} / Budget: ${budgetHours.toFixed(1)}`, margin, margin + 18);
+
     const days = currentSchedule.days;
+    const staffList = currentSchedule.staff;
 
-    const templates = JSON.parse(localStorage.getItem(getUserStorageKey('scheduleTemplates')) || '[]');
-    const template = templates[currentSchedule.activeTemplateId];
-    const dateRange = template ? template.dateRange : 'No Date Range';
-
-    const startX = 10;
-    const pageHeight = 200; // Max height for content
-    const cellHeight = 12;
+    const startY = margin + 25;
     const staffColWidth = 40;
-    const dayWidth = (287 - startX - staffColWidth) / days.length;
+    const dayWidth = (pageWidth - margin * 2 - staffColWidth) / days.length;
+    const cellHeight = 8;
 
-    shifts.forEach((shift, shiftIndex) => {
-        const staffInShift = new Set();
-        const shiftSchedules = {};
+    doc.setFillColor(200, 200, 200);
+    doc.rect(margin, startY, staffColWidth, cellHeight, 'F');
+    doc.setFont(undefined, 'bold');
+    doc.setFontSize(10);
+    doc.text('Staff', margin + 2, startY + 5.5);
+
+    days.forEach((day, index) => {
+        const x = margin + staffColWidth + (index * dayWidth);
+        doc.setFillColor(200, 200, 200);
+        doc.rect(x, startY, dayWidth, cellHeight, 'F');
+        doc.text(day, x + dayWidth / 2, startY + 5.5, { align: 'center' });
+    });
+
+    let currentY = startY + cellHeight;
+
+    staffList.forEach((staffName) => {
+        const schedule = {};
 
         days.forEach(day => {
-            const daySchedule = currentSchedule.schedule[day] || {};
-            const entries = daySchedule[shift] || [];
-
-            entries.forEach(entry => {
-                entry.staff.forEach(staffName => {
-                    staffInShift.add(staffName);
-
-                    if (!shiftSchedules[staffName]) {
-                        shiftSchedules[staffName] = {};
-                    }
-
-                    const holidayName = currentSchedule.holidays[day];
-                    if (holidayName) {
-                        shiftSchedules[staffName][day] = 'OFF';
-                    } else {
-                        const formattedTime = `${formatTime12Hour(entry.startTime)} - ${formatTime12Hour(entry.endTime)}`;
-                        shiftSchedules[staffName][day] = formattedTime;
-                    }
-                });
-            });
-        });
-
-        // Only create a page for shifts that have staff scheduled
-        if (staffInShift.size > 0) {
-            // Add new page for each shift (Morning on page 1, Afternoon on page 2, PM Meeting on page 3)
-            if (shiftIndex > 0) {
-                doc.addPage();
+            const isHoliday = currentSchedule.holidays[day];
+            if (isHoliday) {
+                schedule[day] = 'OFF';
+                return;
             }
 
-            let currentY = 15;
+            const daySchedule = currentSchedule.schedule[day] || {};
+            const staffShifts = [];
 
-            // Title
-            doc.setFontSize(16);
-            doc.setFont(undefined, 'bold');
-            doc.text(`Staff Schedule - ${dateRange}`, 148, currentY, { align: 'center' });
-            currentY += 10;
-
-            // Shift name
-            doc.setFontSize(12);
-            doc.setFont(undefined, 'bold');
-            doc.text(shift, startX, currentY);
-            currentY += 7;
-
-            // Header row (Staff + Days)
-            doc.setFontSize(9);
-            doc.setFont(undefined, 'bold');
-            doc.setFillColor(200, 200, 200);
-            doc.rect(startX, currentY, staffColWidth, cellHeight, 'F');
-            doc.setTextColor(0, 0, 0);
-            doc.text('Staff', startX + 2, currentY + 8);
-
-            days.forEach((day, index) => {
-                const x = startX + staffColWidth + (index * dayWidth);
-                doc.setFillColor(255, 255, 255);
-                doc.rect(x, currentY, dayWidth, cellHeight, 'FD');                doc.setTextColor(0, 0, 0);
-                doc.text(day, x + dayWidth / 2, currentY + 8, { align: 'center' });
-            });
-
-            currentY += cellHeight;
-
-            const sortedStaff = Array.from(staffInShift).sort((a, b) => a.localeCompare(b));
-
-            // Render each staff member
-            sortedStaff.forEach((staffName, staffIndex) => {
-                const schedule = shiftSchedules[staffName] || {};
-
-                const scheduleEntries = days.map(day => schedule[day] || '');
-                const maxLines = Math.max(...scheduleEntries.map(entry => {
-                    if (!entry) return 1;
-                    return entry.split('\n').length;
-                }));
-
-                const maxCellHeight = Math.max(cellHeight, maxLines * cellHeight);
-
-                // Check if we need a new page (leave room for at least one more row)
-                if (currentY + maxCellHeight > pageHeight) {
-                    doc.addPage();
-                    currentY = 15;
-
-                    // Redraw title and shift name on new page
-                    doc.setFontSize(16);
-                    doc.setFont(undefined, 'bold');
-                    doc.text(`Staff Schedule - ${dateRange}`, 148, currentY, { align: 'center' });
-                    currentY += 10;
-
-                    doc.setFontSize(12);
-                    doc.text(`${shift} (continued)`, startX, currentY);
-                    currentY += 7;
-
-                    // Redraw header row
-                    doc.setFontSize(9);
-                    doc.setFont(undefined, 'bold');
-                    doc.setFillColor(200, 200, 200);
-                    doc.rect(startX, currentY, staffColWidth, cellHeight, 'F');
-                    doc.setTextColor(0, 0, 0);
-                    doc.text('Staff', startX + 2, currentY + 8);
-
-                    days.forEach((day, index) => {
-                        const x = startX + staffColWidth + (index * dayWidth);
-                        doc.setFillColor(255, 255, 255);
-                        doc.rect(x, currentY, dayWidth, cellHeight, 'F');
-                        doc.setTextColor(0, 0, 0);
-                        doc.text(day, x + dayWidth / 2, currentY + 8, { align: 'center' });                    });
-
-                    currentY += cellHeight;
-                }
-
-                // Draw staff name cell
-                doc.setFillColor(255, 255, 255);
-                doc.rect(startX, currentY, staffColWidth, maxCellHeight, 'FD');
-                doc.setFont(undefined, 'bold');
-                doc.setFontSize(9);
-                doc.setTextColor(0, 0, 0);
-                doc.text(staffName, startX + 2, currentY + maxCellHeight / 2 + 2);
-
-                // Draw schedule cells for each day
-                doc.setFont(undefined, 'normal');
-                days.forEach((day, index) => {
-                    const x = startX + staffColWidth + (index * dayWidth);
-                    const timeOrOff = schedule[day] || '';
-                    const holidayName = currentSchedule.holidays[day];
-
-                    if (timeOrOff === 'OFF' || holidayName) {
-                        doc.setFillColor(255, 255, 255);
-                        doc.rect(x, currentY, dayWidth, maxCellHeight, 'FD');
-                        doc.setTextColor(0, 0, 0);
-                        doc.setFont(undefined, 'bold');
-                        doc.setFontSize(9);
-
-                        if (holidayName && holidayName !== true) {
-                            doc.text('Off', x + dayWidth / 2, currentY + maxCellHeight / 2 - 1, { align: 'center' });
-                            doc.setFont(undefined, 'normal');
-                            doc.setFontSize(7);
-                            doc.text(holidayName, x + dayWidth / 2, currentY + maxCellHeight / 2 + 3, { align: 'center' });
-                            doc.setFontSize(9);
-                        } else {
-                            doc.text('Off', x + dayWidth / 2, currentY + maxCellHeight / 2 + 2, { align: 'center' });
-                        }
-
-                        doc.setFont(undefined, 'normal');
-                        doc.setTextColor(0, 0, 0);
-                    } else {
-                        doc.setFillColor(255, 255, 255);
-                        doc.rect(x, currentY, dayWidth, maxCellHeight, 'FD');
-                        if (timeOrOff) {
-                            doc.setTextColor(0, 0, 0);
-                            doc.setFontSize(8);
-                            const timeLines = timeOrOff.split('\n');
-                            if (timeLines.length > 1) {
-                                let textY = currentY + 6;
-                                timeLines.forEach(line => {
-                                    doc.text(line, x + dayWidth / 2, textY, { align: 'center' });
-                                    textY += cellHeight;
-                                });
-                            } else {
-                                doc.text(timeOrOff, x + dayWidth / 2, currentY + maxCellHeight / 2 + 2, { align: 'center' });
-                            }
-                        }
+            ['Morning', 'Afternoon', 'PM Meeting'].forEach(shift => {
+                const entries = daySchedule[shift] || [];
+                entries.forEach(entry => {
+                    if (entry.staff.includes(staffName)) {
+                        const start = formatTime12Hour(entry.startTime);
+                        const end = formatTime12Hour(entry.endTime);
+                        staffShifts.push(`${start}-${end}`);
                     }
                 });
-
-                currentY += maxCellHeight;
             });
+
+            schedule[day] = staffShifts.length > 0 ? staffShifts.join('\n') : '';
+        });
+
+        const shiftsPerDay = days.map(day => (schedule[day] || '').split('\n').length);
+        const maxShifts = Math.max(...shiftsPerDay, 1);
+        const maxCellHeight = maxShifts * cellHeight;
+
+        if (currentY + maxCellHeight > pageHeight - margin) {
+            doc.addPage();
+            currentY = margin;
         }
+
+        doc.setFillColor(255, 255, 255);
+        doc.rect(margin, currentY, staffColWidth, maxCellHeight, 'FD');
+        doc.setFont(undefined, 'bold');
+        doc.setFontSize(9);
+        doc.setTextColor(0, 0, 0);
+        doc.text(staffName, margin + 2, currentY + maxCellHeight / 2 + 2);
+
+        doc.setFont(undefined, 'normal');
+        days.forEach((day, index) => {
+            const x = margin + staffColWidth + (index * dayWidth);
+            const timeOrOff = schedule[day] || '';
+            const holidayName = currentSchedule.holidays[day];
+
+            if (timeOrOff === 'OFF' || holidayName) {
+                doc.setFillColor(255, 255, 255);
+                doc.rect(x, currentY, dayWidth, maxCellHeight, 'FD');
+                doc.setTextColor(0, 0, 0);
+                doc.setFont(undefined, 'bold');
+                doc.setFontSize(9);
+
+                if (holidayName && holidayName !== true) {
+                    doc.text('Off', x + dayWidth / 2, currentY + maxCellHeight / 2 - 1, { align: 'center' });
+                    doc.setFont(undefined, 'normal');
+                    doc.setFontSize(7);
+                    doc.text(holidayName, x + dayWidth / 2, currentY + maxCellHeight / 2 + 3, { align: 'center' });
+                    doc.setFontSize(9);
+                } else {
+                    doc.text('Off', x + dayWidth / 2, currentY + maxCellHeight / 2 + 2, { align: 'center' });
+                }
+
+                doc.setFont(undefined, 'normal');
+                doc.setTextColor(0, 0, 0);
+            } else {
+                doc.setFillColor(255, 255, 255);
+                doc.rect(x, currentY, dayWidth, maxCellHeight, 'FD');
+                if (timeOrOff) {
+                    doc.setTextColor(0, 0, 0);
+                    doc.setFontSize(8);
+                    const timeLines = timeOrOff.split('\n');
+                    if (timeLines.length > 1) {
+                        let textY = currentY + 6;
+                        timeLines.forEach(line => {
+                            doc.text(line, x + dayWidth / 2, textY, { align: 'center' });
+                            textY += cellHeight;
+                        });
+                    } else {
+                        doc.text(timeOrOff, x + dayWidth / 2, currentY + maxCellHeight / 2 + 2, { align: 'center' });
+                    }
+                }
+            }
+        });
+
+        currentY += maxCellHeight;
     });
 
     doc.save(`schedule-${dateRange.replace(/[^a-z0-9]/gi, '_')}.pdf`);
@@ -868,7 +1115,7 @@ function clearSchedule() {
 
     renderSchedule();
     updateStats();
-    saveToLocalStorage();
+    saveToDatabase();
 
     document.getElementById('welcomeScreen').style.display = 'flex';
     document.getElementById('scheduleView').style.display = 'none';
@@ -883,49 +1130,16 @@ function closeModal(id) {
     document.getElementById(id).classList.remove('active');
 }
 
-// Local Storage - User-specific keys
-
-function getUserStorageKey(baseKey) {
-    const username = localStorage.getItem('username') || 'default';
-    return `${baseKey}_${username}`;
-}
-
-function saveToLocalStorage() {
-    const storageKey = getUserStorageKey('currentSchedule');
-    localStorage.setItem(storageKey, JSON.stringify(currentSchedule));
-    if (currentSchedule.activeTemplateId !== null) {
-        saveCurrentTemplateToStorage();
-    }
-    saveToDatabase();
-}
-
-function loadFromLocalStorage() {
-    const storageKey = getUserStorageKey('currentSchedule');
-    const saved = localStorage.getItem(storageKey);
-    if (saved) {
-        const data = JSON.parse(saved);
-        currentSchedule.staff = data.staff || [];
-        currentSchedule.schedule = data.schedule || {};
-        currentSchedule.holidays = data.holidays || {};
-        currentSchedule.budgetHours = data.budgetHours || 0;
-        currentSchedule.activeTemplateId = data.activeTemplateId !== undefined ? data.activeTemplateId : null;
-    }
-}
-
-// MongoDB Cloud Sync
+// MongoDB Database Operations - PRIMARY DATA SOURCE
 async function loadFromDatabase() {
     const token = localStorage.getItem('authToken');
     if (!token) {
-        loadFromLocalStorage();
+        console.error('No auth token found');
         return;
     }
 
     try {
-        const url = window.location.hostname === 'localhost'
-            ? 'http://localhost:3000/api/schedule'
-            : '/api/schedule';
-
-        const response = await fetch(url, {
+        const response = await fetch(`${API_URL}/api/schedule`, {
             method: 'GET',
             headers: {
                 'Authorization': `Bearer ${token}`,
@@ -936,26 +1150,33 @@ async function loadFromDatabase() {
         if (response.ok) {
             const data = await response.json();
 
-            if (data.allSchedules && data.allSchedules.length > 0) {
-                localStorage.setItem(getUserStorageKey('scheduleTemplates'), JSON.stringify(data.allSchedules));
-            }
+            // Load current schedule state from database
+            currentSchedule.activeTemplateId = data.currentScheduleId !== undefined ? data.currentScheduleId : null;
 
-            if (data.currentScheduleId !== null) {
-                const templates = JSON.parse(localStorage.getItem(getUserStorageKey('scheduleTemplates')) || '[]');
-                const template = templates[data.currentScheduleId];
-                if (template) {
-                    currentSchedule.activeTemplateId = data.currentScheduleId;
-                    currentSchedule.staff = [...(template.staff || [])];
-                    currentSchedule.schedule = JSON.parse(JSON.stringify(template.schedule || {}));
-                    currentSchedule.holidays = {...(template.holidays || {})};
-                    currentSchedule.budgetHours = template.budgetHours || 0;
-                }
+            // Convert old staff format to new format if needed
+            let staffData = data.staffDirectory || [];
+            if (staffData.length > 0 && typeof staffData[0] === 'string') {
+                // Old format: array of strings
+                // Convert to new format: array of objects
+                staffData = staffData.map(name => ({
+                    name: name,
+                    status: 'active',
+                    notes: ''
+                }));
+                console.log('Converted old staff format to new format');
             }
+            currentSchedule.staff = staffData;
+
+            currentSchedule.schedule = data.currentSchedule || {};
+            currentSchedule.holidays = data.holidays || {};
+            currentSchedule.budgetHours = data.budgetHours || 0;
+
+            console.log('Data loaded from MongoDB');
         } else {
-            loadFromLocalStorage();
+            console.error('Failed to load data from MongoDB');
         }
     } catch (error) {
-        loadFromLocalStorage();
+        console.error('Error loading from database:', error);
     }
 }
 
@@ -964,7 +1185,10 @@ let saveDebounceTimer = null;
 
 async function saveToDatabase() {
     const token = localStorage.getItem('authToken');
-    if (!token) return;
+    if (!token) {
+        console.error('No auth token, cannot save');
+        return;
+    }
 
     // Clear existing timer
     if (saveDebounceTimer) {
@@ -974,30 +1198,28 @@ async function saveToDatabase() {
     // Debounce: wait 500ms before actually saving
     saveDebounceTimer = setTimeout(async () => {
         try {
-            const url = window.location.hostname === 'localhost'
-                ? 'http://localhost:3000/api/schedule'
-                : '/api/schedule';
-
-            const templates = JSON.parse(localStorage.getItem(getUserStorageKey('scheduleTemplates')) || '[]');
-
-            await fetch(url, {
+            const response = await fetch(`${API_URL}/api/schedule`, {
                 method: 'POST',
                 headers: {
                     'Authorization': `Bearer ${token}`,
                     'Content-Type': 'application/json'
                 },
                 body: JSON.stringify({
-                    allSchedules: templates,
                     currentScheduleId: currentSchedule.activeTemplateId,
                     staffDirectory: currentSchedule.staff,
+                    currentSchedule: currentSchedule.schedule,
                     budgetHours: currentSchedule.budgetHours,
-                    weekDates: {},
                     holidays: currentSchedule.holidays
                 })
             });
+
+            if (response.ok) {
+                console.log('Data saved to MongoDB');
+            } else {
+                console.error('Failed to save to MongoDB');
+            }
         } catch (error) {
-            // Silent fail - data still in localStorage
-            console.log('Save to database failed (data still in localStorage)');
+            console.error('Error saving to database:', error);
         }
     }, 500);
 }
@@ -1014,5 +1236,5 @@ function escapeHtml(text) {
     return text.replace(/[&<>"']/g, m => map[m]);
 }
 
-// Initialize on load
-window.addEventListener('DOMContentLoaded', init);
+// Note: init() is called from auth.js after successful login
+// Do not call init() automatically on page load
